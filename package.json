@@ -4,9 +4,9 @@
     "description": "Auto-capture TradingView charts and analyze with Gemini AI, deliver via Telegram",
     "type": "module",
     "scripts": {
-        "start": "tsx --env-file=.env src/index.ts",
+        "start": "tsx src/index.ts",
         "build": "tsc",
-        "analyze": "tsx --env-file=.env src/index.ts"
+        "analyze": "tsx src/index.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.105.0",

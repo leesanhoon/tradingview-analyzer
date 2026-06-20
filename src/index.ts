@@ -1,3 +1,4 @@
+import "./env.js";
 import { captureAllCharts } from "./screenshot.js";
 import { analyzeAllCharts } from "./analyzer.js";
 import { sendAllAnalyses } from "./telegram.js";
