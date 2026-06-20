@@ -56,6 +56,7 @@ new TradingView.widget({
   locale: "en",
   hide_top_toolbar: false,
   hide_side_toolbar: false,
+  hide_volume: true,
   allow_symbol_change: false,
   save_image: false,
   withdateranges: true,
