@@ -9,7 +9,7 @@ export const CHARTS: ChartConfig[] = [
   chart("XAU/USD", "OANDA:XAUUSD"),
   chart("XAG/USD", "OANDA:XAGUSD"),
 
-  // Major pairs
+  // Major pairs — highest liquidity, tight spreads
   chart("EUR/USD", "OANDA:EURUSD"),
   chart("GBP/USD", "OANDA:GBPUSD"),
   chart("USD/JPY", "OANDA:USDJPY"),
@@ -18,7 +18,7 @@ export const CHARTS: ChartConfig[] = [
   chart("USD/CAD", "OANDA:USDCAD"),
   chart("NZD/USD", "OANDA:NZDUSD"),
 
-  // Cross pairs
+  // Cross pairs — good price action patterns
   chart("EUR/GBP", "OANDA:EURGBP"),
   chart("EUR/JPY", "OANDA:EURJPY"),
   chart("GBP/JPY", "OANDA:GBPJPY"),
@@ -26,6 +26,16 @@ export const CHARTS: ChartConfig[] = [
   chart("EUR/AUD", "OANDA:EURAUD"),
   chart("GBP/AUD", "OANDA:GBPAUD"),
   chart("EUR/CAD", "OANDA:EURCAD"),
+
+  // Additional volatile crosses — strong momentum setups
+  chart("CAD/JPY", "OANDA:CADJPY"),
+  chart("CHF/JPY", "OANDA:CHFJPY"),
+  chart("GBP/CHF", "OANDA:GBPCHF"),
+  chart("EUR/NZD", "OANDA:EURNZD"),
+  chart("GBP/NZD", "OANDA:GBPNZD"),
+  chart("NZD/JPY", "OANDA:NZDJPY"),
+  chart("AUD/CAD", "OANDA:AUDCAD"),
+  chart("AUD/NZD", "OANDA:AUDNZD"),
 ];
 
 export function buildChartHtml(c: ChartConfig): string {

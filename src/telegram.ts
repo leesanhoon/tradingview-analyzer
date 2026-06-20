@@ -1,6 +1,4 @@
-import { readFile } from "fs/promises";
 import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
-import { annotateChart } from "./annotate.js";
 
 function getTelegramConfig() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -134,19 +132,16 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp — tìm thấy *${result.setups.length}* setup`,
   );
 
-  // Detailed setups with annotated charts
   for (const setup of result.setups) {
     const screenshot = findScreenshot(setup.pair, result.screenshots);
 
     if (screenshot) {
       try {
-        const originalBuffer = await readFile(screenshot.filepath);
-        const annotatedBuffer = await annotateChart(originalBuffer, setup);
         const caption = `📊 ${setup.pair} H4 — ${setup.direction}`;
-        await sendPhoto(annotatedBuffer, caption);
-        console.log(`  ✓ Sent annotated chart: ${setup.pair}`);
+        await sendPhoto(screenshot.buffer, caption);
+        console.log(`  ✓ Sent chart: ${setup.pair}`);
       } catch (error) {
-        console.error(`  ✗ Failed to annotate/send chart ${setup.pair}:`, error);
+        console.error(`  ✗ Failed to send chart ${setup.pair}:`, error);
       }
     }
 
