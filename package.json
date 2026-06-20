@@ -1,0 +1,20 @@
+{
+  "name": "tradingview-analyzer",
+  "version": "1.0.0",
+  "description": "Auto-capture TradingView charts and analyze with Gemini AI, deliver via Telegram",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "build": "tsc",
+    "analyze": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}
