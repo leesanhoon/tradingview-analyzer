@@ -1,57 +1,34 @@
 import type { ChartConfig } from "./types.js";
 
+function chart(name: string, symbol: string): ChartConfig {
+  return { name: `${name} H4`, symbol, interval: "240", description: `${name} — H4` };
+}
+
 export const CHARTS: ChartConfig[] = [
-  {
-    name: "XAU/USD H4",
-    symbol: "OANDA:XAUUSD",
-    interval: "240",
-    description: "Gold / US Dollar — H4",
-  },
-  {
-    name: "EUR/USD H4",
-    symbol: "OANDA:EURUSD",
-    interval: "240",
-    description: "Euro / US Dollar — H4",
-  },
-  {
-    name: "GBP/USD H4",
-    symbol: "OANDA:GBPUSD",
-    interval: "240",
-    description: "British Pound / US Dollar — H4",
-  },
-  {
-    name: "USD/JPY H4",
-    symbol: "OANDA:USDJPY",
-    interval: "240",
-    description: "US Dollar / Japanese Yen — H4",
-  },
-  {
-    name: "AUD/USD H4",
-    symbol: "OANDA:AUDUSD",
-    interval: "240",
-    description: "Australian Dollar / US Dollar — H4",
-  },
-  {
-    name: "USD/CHF H4",
-    symbol: "OANDA:USDCHF",
-    interval: "240",
-    description: "US Dollar / Swiss Franc — H4",
-  },
-  {
-    name: "USD/CAD H4",
-    symbol: "OANDA:USDCAD",
-    interval: "240",
-    description: "US Dollar / Canadian Dollar — H4",
-  },
-  {
-    name: "NZD/USD H4",
-    symbol: "OANDA:NZDUSD",
-    interval: "240",
-    description: "New Zealand Dollar / US Dollar — H4",
-  },
+  // Commodities
+  chart("XAU/USD", "OANDA:XAUUSD"),
+  chart("XAG/USD", "OANDA:XAGUSD"),
+
+  // Major pairs
+  chart("EUR/USD", "OANDA:EURUSD"),
+  chart("GBP/USD", "OANDA:GBPUSD"),
+  chart("USD/JPY", "OANDA:USDJPY"),
+  chart("AUD/USD", "OANDA:AUDUSD"),
+  chart("USD/CHF", "OANDA:USDCHF"),
+  chart("USD/CAD", "OANDA:USDCAD"),
+  chart("NZD/USD", "OANDA:NZDUSD"),
+
+  // Cross pairs
+  chart("EUR/GBP", "OANDA:EURGBP"),
+  chart("EUR/JPY", "OANDA:EURJPY"),
+  chart("GBP/JPY", "OANDA:GBPJPY"),
+  chart("AUD/JPY", "OANDA:AUDJPY"),
+  chart("EUR/AUD", "OANDA:EURAUD"),
+  chart("GBP/AUD", "OANDA:GBPAUD"),
+  chart("EUR/CAD", "OANDA:EURCAD"),
 ];
 
-export function buildChartHtml(chart: ChartConfig): string {
+export function buildChartHtml(c: ChartConfig): string {
   return `<!DOCTYPE html>
 <html><head><style>body{margin:0;background:#131722;}#tv_chart{width:100%;height:100vh;}</style></head>
 <body>
@@ -61,8 +38,8 @@ export function buildChartHtml(chart: ChartConfig): string {
 new TradingView.widget({
   container_id: "tv_chart",
   autosize: true,
-  symbol: "${chart.symbol}",
-  interval: "${chart.interval}",
+  symbol: "${c.symbol}",
+  interval: "${c.interval}",
   timezone: "Etc/UTC",
   theme: "dark",
   style: "1",

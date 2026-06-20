@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, type BrowserContext } from "playwright";
 import { mkdir } from "fs/promises";
 import { join } from "path";
 import { CHARTS, buildChartHtml } from "./charts.config.js";
@@ -38,7 +38,7 @@ export async function captureAllCharts(): Promise<ScreenshotResult[]> {
 }
 
 async function captureChart(
-  context: Awaited<ReturnType<typeof chromium.launch>>["contexts"] extends Array<infer T> ? T : never,
+  context: BrowserContext,
   chart: (typeof CHARTS)[number],
 ): Promise<ScreenshotResult> {
   const page = await context.newPage();

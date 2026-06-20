@@ -1,5 +1,5 @@
 import { readFile } from "fs/promises";
-import type { AnalysisResult, TradeSetup, ScreenshotResult } from "./types.js";
+import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
 import { annotateChart } from "./annotate.js";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -15,7 +15,7 @@ if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
 async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
   const formData = new FormData();
   formData.append("chat_id", TELEGRAM_CHAT_ID!);
-  formData.append("photo", new Blob([photoBuffer], { type: "image/png" }), "chart.png");
+  formData.append("photo", new Blob([new Uint8Array(photoBuffer)], { type: "image/png" }), "chart.png");
   formData.append("caption", caption.slice(0, 1024));
 
   const response = await fetch(`${TELEGRAM_API}/sendPhoto`, {
@@ -58,6 +58,30 @@ async function sendMessage(text: string): Promise<void> {
   }
 }
 
+function buildSummaryTable(summaries: PairSummary[]): string {
+  const lines: string[] = [
+    "📊 *TỔNG QUAN TẤT CẢ CẶP TIỀN*",
+    "",
+  ];
+
+  for (const s of summaries) {
+    const icon = s.confidence >= 70 ? "🟢" : s.confidence >= 40 ? "🟡" : "🔴";
+    lines.push(`${icon} *${s.pair}* — ${s.confidence}%`);
+    lines.push(`   ${s.trend}`);
+    lines.push(`   ${s.status}`);
+    lines.push("");
+  }
+
+  const tradeCount = summaries.filter((s) => s.confidence >= 70).length;
+  if (tradeCount > 0) {
+    lines.push(`✅ *${tradeCount}* cặp có setup đạt yêu cầu (≥70%)`);
+  } else {
+    lines.push("⏸ Không có cặp nào đạt yêu cầu (≥70%)");
+  }
+
+  return lines.join("\n");
+}
+
 function buildCopyableSetup(setup: TradeSetup): string {
   const arrow = setup.direction === "LONG" ? "🟢" : "🔴";
   const confidence = setup.confidence ?? 0;
@@ -95,18 +119,30 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
+  // Header
+  await sendMessage(
+    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền`,
+  );
+
+  // Summary table for ALL pairs
+  if (result.summaries.length > 0) {
+    await sendMessage(buildSummaryTable(result.summaries));
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  // No setups case
   if (result.setups.length === 0) {
     await sendMessage(
-      `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n\n⏸ *KHÔNG CÓ SETUP ĐỘ TIN CẬY CAO*\n\n${result.noSetupReason || "Chờ đợi setup rõ ràng hơn."}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+      `⏸ *KHÔNG CÓ SETUP ĐỘ TIN CẬY CAO*\n\n${result.noSetupReason || "Chờ đợi setup rõ ràng hơn."}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
-    console.log("  → No high-confidence setups found. Sent wait message.");
+    console.log("  → No high-confidence setups. Summary + wait message sent.");
     return;
   }
 
-  await sendMessage(
-    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Tìm thấy *${result.setups.length}* setup độ tin cậy cao`,
-  );
+  // Separator before detailed setups
+  await sendMessage(`━━━━━━━━━━━━━━━━━━\n📈 *CHI TIẾT CÁC SETUP ≥70%*\n━━━━━━━━━━━━━━━━━━`);
 
+  // Detailed setups with annotated charts
   for (const setup of result.setups) {
     const screenshot = findScreenshot(setup.pair, result.screenshots);
 
@@ -116,16 +152,16 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
         const annotatedBuffer = await annotateChart(originalBuffer, setup);
         const caption = `📊 ${setup.pair} H4 — ${setup.direction}`;
         await sendPhoto(annotatedBuffer, caption);
-        console.log(`✓ Sent annotated chart: ${setup.pair}`);
+        console.log(`  ✓ Sent annotated chart: ${setup.pair}`);
       } catch (error) {
-        console.error(`✗ Failed to annotate/send chart ${setup.pair}:`, error);
+        console.error(`  ✗ Failed to annotate/send chart ${setup.pair}:`, error);
       }
     }
 
     await sendMessage(buildCopyableSetup(setup));
-    console.log(`✓ Sent setup: ${setup.pair} ${setup.direction}`);
+    console.log(`  ✓ Sent setup: ${setup.pair} ${setup.direction}`);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
-  await sendMessage(`✅ *Scan hoàn tất*\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
+  await sendMessage(`✅ *Scan hoàn tất* — ${result.setups.length} setup(s)\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
 }

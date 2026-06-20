@@ -11,6 +11,13 @@ export type ScreenshotResult = {
   filepath: string;
 };
 
+export type PairSummary = {
+  pair: string;
+  trend: string;
+  status: string;
+  confidence: number;
+};
+
 export type TradeSetup = {
   pair: string;
   direction: "LONG" | "SHORT";
@@ -27,6 +34,7 @@ export type TradeSetup = {
 };
 
 export type AnalysisResult = {
+  summaries: PairSummary[];
   setups: TradeSetup[];
   noSetupReason: string;
   screenshots: ScreenshotResult[];
