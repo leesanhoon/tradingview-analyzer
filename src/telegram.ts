@@ -33,6 +33,7 @@ async function sendPhoto(
 }
 
 async function sendMessage(text: string): Promise<void> {
+  // Try Markdown first, fall back to plain text if parse fails
   const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -44,8 +45,20 @@ async function sendMessage(text: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Telegram sendMessage failed: ${error}`);
+    const body = await response.text();
+    if (body.includes("can't parse entities")) {
+      const retry = await fetch(`${TELEGRAM_API}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
+      });
+      if (!retry.ok) {
+        const retryErr = await retry.text();
+        throw new Error(`Telegram sendMessage failed: ${retryErr}`);
+      }
+      return;
+    }
+    throw new Error(`Telegram sendMessage failed: ${body}`);
   }
 }
 
@@ -73,24 +86,6 @@ function splitMessage(text: string, maxLength: number = 4096): string[] {
   return chunks;
 }
 
-export async function sendAnalysisToTelegram(
-  result: AnalysisResult,
-): Promise<void> {
-  const photoBuffer = await readFile(result.screenshotPath);
-
-  const photoCaption = `📊 *${result.chart.name}*\n⏰ ${new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}`;
-  await sendPhoto(photoBuffer, photoCaption);
-
-  const analysisHeader = `📈 *Phân tích: ${result.chart.name}*\n${"─".repeat(30)}\n\n`;
-  const fullMessage = analysisHeader + result.analysis;
-  const chunks = splitMessage(fullMessage);
-
-  for (const chunk of chunks) {
-    await sendMessage(chunk);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-}
-
 export async function sendAllAnalyses(
   results: AnalysisResult[],
 ): Promise<void> {
@@ -98,17 +93,27 @@ export async function sendAllAnalyses(
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
-  await sendMessage(`🚀 *TradingView Auto Analysis*\n📅 ${timestamp}\n📊 ${results.length} charts analyzed`);
+  await sendMessage(`🚀 *Bob Volman Scalping Scanner*\n📅 ${timestamp}\n📊 Scanning forex majors + EMA 20`);
 
   for (const result of results) {
-    try {
-      await sendAnalysisToTelegram(result);
-      console.log(`✓ Sent to Telegram: ${result.chart.name}`);
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
-    } catch (error) {
-      console.error(`✗ Failed to send ${result.chart.name}:`, error);
+    for (const screenshot of result.screenshots) {
+      try {
+        const photoBuffer = await readFile(screenshot.filepath);
+        const caption = `📊 *${screenshot.chart.name}*`;
+        await sendPhoto(photoBuffer, caption);
+        console.log(`✓ Sent chart: ${screenshot.chart.name}`);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`✗ Failed to send chart ${screenshot.chart.name}:`, error);
+      }
+    }
+
+    const chunks = splitMessage(result.analysis);
+    for (const chunk of chunks) {
+      await sendMessage(chunk);
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
-  await sendMessage(`✅ *Hoàn tất phân tích ${results.length} charts*\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
+  await sendMessage(`✅ *Scan hoàn tất*\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
 }

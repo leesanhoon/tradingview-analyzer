@@ -4,29 +4,31 @@ import { sendAllAnalyses } from "./telegram.js";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
-  console.log("🚀 Starting TradingView chart analysis...\n");
+  console.log("🚀 Bob Volman Scalping Scanner — Starting...\n");
 
-  console.log("📸 Capturing charts...");
+  console.log("📸 Capturing all forex charts (M5 + EMA 20)...");
   const screenshots = await captureAllCharts();
 
   if (screenshots.length === 0) {
     console.error("No charts captured. Exiting.");
     process.exit(1);
   }
+  console.log(`✓ Captured ${screenshots.length} charts\n`);
 
-  console.log(`\n🤖 Analyzing ${screenshots.length} charts with Gemini...\n`);
+  console.log("🤖 Sending all charts to Claude for analysis...");
   const analyses = await analyzeAllCharts(screenshots);
 
   if (analyses.length === 0) {
     console.error("No analyses generated. Exiting.");
     process.exit(1);
   }
+  console.log("✓ Analysis complete\n");
 
-  console.log(`\n📨 Sending results to Telegram...\n`);
+  console.log("📨 Sending results to Telegram...");
   await sendAllAnalyses(analyses);
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\n✅ Done! Processed ${analyses.length} charts in ${elapsed}s`);
+  console.log(`\n✅ Done! Scanned ${screenshots.length} pairs in ${elapsed}s`);
 }
 
 main().catch((error) => {

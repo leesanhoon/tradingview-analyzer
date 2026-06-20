@@ -14,5 +14,5 @@ export type ScreenshotResult = {
 export type AnalysisResult = {
   chart: ChartConfig;
   analysis: string;
-  screenshotPath: string;
+  screenshots: ScreenshotResult[];
 };

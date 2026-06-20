@@ -1,41 +1,83 @@
 import type { ChartConfig } from "./types.js";
 
-/**
- * Cấu hình các chart TradingView cần theo dõi.
- *
- * Hỗ trợ 2 loại URL:
- * 1. Widget URL (khuyên dùng — không cần login):
- *    https://www.tradingview.com/widgetembed/?symbol=BINANCE:BTCUSDT&interval=240&theme=dark
- *
- * 2. Public chart URL (shared chart):
- *    https://www.tradingview.com/chart/XXXXXXXX/
- *
- * Lưu ý: Chart cá nhân (cần login) sẽ không chụp được trên GitHub Actions.
- * Dùng widget URL để đảm bảo hoạt động ổn định.
- */
+const interval = "240"; // 240 minutes = 4 hours
+
 export const CHARTS: ChartConfig[] = [
-  {
-    name: "XAU/USD 4H",
+    {
+    name: `XAU/USD ${interval}`,
     symbol: "OANDA:XAUUSD",
-    interval: "240",
-    description: "Gold 4-hour chart",
+    interval,
+    description: `Gold / US Dollar — ${interval} min`,
+  },
+  {
+    name: `EUR/USD ${interval}`,
+    symbol: "OANDA:EURUSD",
+    interval,
+    description: `Euro / US Dollar — ${interval} min`,
+  },
+  {
+    name: `GBP/USD ${interval}`,
+    symbol: "OANDA:GBPUSD",
+    interval,
+    description: `British Pound / US Dollar — ${interval} min`,
+  },
+  {
+    name: `USD/JPY ${interval}`,
+    symbol: "OANDA:USDJPY",
+    interval,
+    description: `US Dollar / Japanese Yen — ${interval} min`,
+  },
+  {
+    name: `AUD/USD ${interval}`,
+    symbol: "OANDA:AUDUSD",
+    interval,
+    description: `Australian Dollar / US Dollar — ${interval} min`,
+  },
+  {
+    name: `USD/CHF ${interval}`,
+    symbol: "OANDA:USDCHF",
+    interval,
+    description: `US Dollar / Swiss Franc — ${interval} min`,
+  },
+  {
+    name: `USD/CAD ${interval}`,
+    symbol: "OANDA:USDCAD",
+    interval,
+    description: `US Dollar / Canadian Dollar — ${interval} min`,
+  },
+  {
+    name: `NZD/USD ${interval}`,
+    symbol: "OANDA:NZDUSD",
+    interval,
+    description: `New Zealand Dollar / US Dollar — ${interval} min`,
   },
 ];
 
-export function buildWidgetUrl(chart: ChartConfig): string {
-  const params = new URLSearchParams({
-    symbol: chart.symbol,
-    interval: chart.interval,
-    theme: "dark",
-    style: "1",
-    locale: "en",
-    hide_top_toolbar: "0",
-    hide_side_toolbar: "0",
-    allow_symbol_change: "0",
-    save_image: "0",
-    withdateranges: "1",
-    studies: '["MASimple@tv-basicstudies","RSI@tv-basicstudies","MACD@tv-basicstudies"]',
-  });
-
-  return `https://www.tradingview.com/widgetembed/?${params.toString()}`;
+export function buildChartHtml(chart: ChartConfig): string {
+  return `<!DOCTYPE html>
+<html><head><style>body{margin:0;background:#131722;}#tv_chart{width:100%;height:100vh;}</style></head>
+<body>
+<div id="tv_chart"></div>
+<script src="https://s3.tradingview.com/tv.js"></script>
+<script>
+new TradingView.widget({
+  container_id: "tv_chart",
+  autosize: true,
+  symbol: "${chart.symbol}",
+  interval: "${chart.interval}",
+  timezone: "Etc/UTC",
+  theme: "dark",
+  style: "1",
+  locale: "en",
+  hide_top_toolbar: false,
+  hide_side_toolbar: false,
+  allow_symbol_change: false,
+  save_image: false,
+  withdateranges: true,
+  studies: [
+    { id: "MAExp@tv-basicstudies", inputs: { length: 20 } }
+  ]
+});
+</script>
+</body></html>`;
 }

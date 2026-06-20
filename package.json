@@ -1,20 +1,21 @@
 {
-  "name": "tradingview-analyzer",
-  "version": "1.0.0",
-  "description": "Auto-capture TradingView charts and analyze with Gemini AI, deliver via Telegram",
-  "type": "module",
-  "scripts": {
-    "start": "tsx src/index.ts",
-    "build": "tsc",
-    "analyze": "tsx src/index.ts"
-  },
-  "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "playwright": "^1.49.0"
-  },
-  "devDependencies": {
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.0",
-    "@types/node": "^22.0.0"
-  }
+    "name": "tradingview-analyzer",
+    "version": "1.0.0",
+    "description": "Auto-capture TradingView charts and analyze with Gemini AI, deliver via Telegram",
+    "type": "module",
+    "scripts": {
+        "start": "tsx --env-file=.env src/index.ts",
+        "build": "tsc",
+        "analyze": "tsx --env-file=.env src/index.ts"
+    },
+    "dependencies": {
+        "@anthropic-ai/sdk": "^0.105.0",
+        "@google/generative-ai": "^0.24.1",
+        "playwright": "^1.49.0"
+    },
+    "devDependencies": {
+        "@types/node": "^22.0.0",
+        "tsx": "^4.19.0",
+        "typescript": "^5.6.0"
+    }
 }
