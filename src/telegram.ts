@@ -2,23 +2,23 @@ import { readFile } from "fs/promises";
 import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
 import { annotateChart } from "./annotate.js";
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-
-if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-  throw new Error(
-    "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables are required",
-  );
+function getTelegramConfig() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chatId) {
+    throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables are required");
+  }
+  return { token, chatId, api: `https://api.telegram.org/bot${token}` };
 }
 
 async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
+  const { chatId, api } = getTelegramConfig();
   const formData = new FormData();
-  formData.append("chat_id", TELEGRAM_CHAT_ID!);
+  formData.append("chat_id", chatId);
   formData.append("photo", new Blob([new Uint8Array(photoBuffer)], { type: "image/png" }), "chart.png");
   formData.append("caption", caption.slice(0, 1024));
 
-  const response = await fetch(`${TELEGRAM_API}/sendPhoto`, {
+  const response = await fetch(`${api}/sendPhoto`, {
     method: "POST",
     body: formData,
   });
@@ -30,11 +30,12 @@ async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
 }
 
 async function sendMessage(text: string): Promise<void> {
-  const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
+  const { chatId, api } = getTelegramConfig();
+  const response = await fetch(`${api}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID,
+      chat_id: chatId,
       text,
       parse_mode: "Markdown",
     }),
@@ -43,10 +44,10 @@ async function sendMessage(text: string): Promise<void> {
   if (!response.ok) {
     const body = await response.text();
     if (body.includes("can't parse entities")) {
-      const retry = await fetch(`${TELEGRAM_API}/sendMessage`, {
+      const retry = await fetch(`${api}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
+        body: JSON.stringify({ chat_id: chatId, text }),
       });
       if (!retry.ok) {
         const retryErr = await retry.text();
