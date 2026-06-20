@@ -1,5 +1,6 @@
 import { readFile } from "fs/promises";
-import type { AnalysisResult } from "./types.js";
+import type { AnalysisResult, TradeSetup, ScreenshotResult } from "./types.js";
+import { annotateChart } from "./annotate.js";
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
@@ -11,15 +12,11 @@ if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
   );
 }
 
-async function sendPhoto(
-  photoBuffer: Buffer,
-  caption: string,
-): Promise<void> {
+async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
   const formData = new FormData();
   formData.append("chat_id", TELEGRAM_CHAT_ID!);
   formData.append("photo", new Blob([photoBuffer], { type: "image/png" }), "chart.png");
   formData.append("caption", caption.slice(0, 1024));
-  formData.append("parse_mode", "Markdown");
 
   const response = await fetch(`${TELEGRAM_API}/sendPhoto`, {
     method: "POST",
@@ -33,7 +30,6 @@ async function sendPhoto(
 }
 
 async function sendMessage(text: string): Promise<void> {
-  // Try Markdown first, fall back to plain text if parse fails
   const response = await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -62,57 +58,68 @@ async function sendMessage(text: string): Promise<void> {
   }
 }
 
-function splitMessage(text: string, maxLength: number = 4096): string[] {
-  if (text.length <= maxLength) return [text];
-
-  const chunks: string[] = [];
-  let remaining = text;
-
-  while (remaining.length > 0) {
-    if (remaining.length <= maxLength) {
-      chunks.push(remaining);
-      break;
-    }
-
-    let splitIndex = remaining.lastIndexOf("\n", maxLength);
-    if (splitIndex === -1 || splitIndex < maxLength * 0.5) {
-      splitIndex = maxLength;
-    }
-
-    chunks.push(remaining.slice(0, splitIndex));
-    remaining = remaining.slice(splitIndex).trimStart();
-  }
-
-  return chunks;
+function buildCopyableSetup(setup: TradeSetup): string {
+  const arrow = setup.direction === "LONG" ? "🟢" : "🔴";
+  return [
+    `${arrow} *${setup.pair} — ${setup.direction}*`,
+    `📋 _${setup.setup}_`,
+    "",
+    "```",
+    `Direction : ${setup.direction}`,
+    `Entry     : ${setup.entry}`,
+    `Stop Loss : ${setup.stopLoss}`,
+    `TP1       : ${setup.takeProfit1}`,
+    `TP2       : ${setup.takeProfit2}`,
+    `R:R       : ${setup.riskReward}`,
+    "```",
+    "",
+    `✅ *Lý do:*`,
+    ...setup.reasons.map((r) => `  • ${r}`),
+    "",
+    `💡 ${setup.summary}`,
+  ].join("\n");
 }
 
-export async function sendAllAnalyses(
-  results: AnalysisResult[],
-): Promise<void> {
+function findScreenshot(pair: string, screenshots: ScreenshotResult[]): ScreenshotResult | undefined {
+  const normalized = pair.replace("/", "").toUpperCase();
+  return screenshots.find((s) => s.chart.symbol.toUpperCase().includes(normalized));
+}
+
+export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
   const timestamp = new Date().toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
-  await sendMessage(`🚀 *Bob Volman Scalping Scanner*\n📅 ${timestamp}\n📊 Scanning forex majors + EMA 20`);
+  if (result.setups.length === 0) {
+    await sendMessage(
+      `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n\n⏸ *KHÔNG CÓ SETUP ĐỘ TIN CẬY CAO*\n\n${result.noSetupReason || "Chờ đợi setup rõ ràng hơn."}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+    );
+    console.log("  → No high-confidence setups found. Sent wait message.");
+    return;
+  }
 
-  for (const result of results) {
-    for (const screenshot of result.screenshots) {
+  await sendMessage(
+    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Tìm thấy *${result.setups.length}* setup độ tin cậy cao`,
+  );
+
+  for (const setup of result.setups) {
+    const screenshot = findScreenshot(setup.pair, result.screenshots);
+
+    if (screenshot) {
       try {
-        const photoBuffer = await readFile(screenshot.filepath);
-        const caption = `📊 *${screenshot.chart.name}*`;
-        await sendPhoto(photoBuffer, caption);
-        console.log(`✓ Sent chart: ${screenshot.chart.name}`);
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        const originalBuffer = await readFile(screenshot.filepath);
+        const annotatedBuffer = await annotateChart(originalBuffer, setup);
+        const caption = `📊 ${setup.pair} H4 — ${setup.direction}`;
+        await sendPhoto(annotatedBuffer, caption);
+        console.log(`✓ Sent annotated chart: ${setup.pair}`);
       } catch (error) {
-        console.error(`✗ Failed to send chart ${screenshot.chart.name}:`, error);
+        console.error(`✗ Failed to annotate/send chart ${setup.pair}:`, error);
       }
     }
 
-    const chunks = splitMessage(result.analysis);
-    for (const chunk of chunks) {
-      await sendMessage(chunk);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
+    await sendMessage(buildCopyableSetup(setup));
+    console.log(`✓ Sent setup: ${setup.pair} ${setup.direction}`);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
   await sendMessage(`✅ *Scan hoàn tất*\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);

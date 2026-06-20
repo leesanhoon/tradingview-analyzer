@@ -1,58 +1,73 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
-import type { ScreenshotResult, AnalysisResult } from "./types.js";
+import type { ScreenshotResult, AnalysisResult, TradeSetup } from "./types.js";
 
-const IsUseGemini = true;
+const ANALYSIS_PROMPT = `Bạn là một trader chuyên nghiệp áp dụng các nguyên lý Price Action của Bob Volman (buildup, squeeze, false break, tease, round number) trên khung H4 với EMA 20.
 
-const ANALYSIS_PROMPT = `Bạn là một trader chuyên nghiệp sử dụng phương pháp Price Action Scalping của Bob Volman, tập trung vào EMA 20 trên khung M5.
+Tôi gửi bạn tất cả chart H4 của các cặp forex chính + XAU/USD.
 
-Tôi gửi bạn tất cả chart M5 của các cặp forex chính. Hãy phân tích TỪNG cặp và cuối cùng đưa ra KHUYẾN NGHỊ tổng hợp.
+## Nhiệm vụ:
+Phân tích từng cặp và CHỈ chọn ra những cặp có setup đạt ĐỘ TIN CẬY CAO.
 
-## Phân tích TỪNG cặp tiền — theo phương pháp Bob Volman:
+## Tiêu chí độ tin cậy cao — cần ít nhất 3/5:
+1. Buildup rõ ràng (nến nhỏ tích lũy trước breakout)
+2. Đúng hướng EMA 20 (trade theo hướng dốc của EMA)
+3. False break hoặc tease xác nhận
+4. Gần round number hoặc support/resistance quan trọng
+5. Nến xác nhận mạnh (thân dài, bấc ngắn)
 
-### 1. Bối cảnh thị trường (Market Context)
-- **Vị trí giá vs EMA 20**: Trên / Dưới / Đang cắt → xác định bias
-- **Độ dốc EMA 20**: Dốc lên / Dốc xuống / Phẳng → momentum
-- **Khoảng cách giá vs EMA 20**: Xa (có thể pullback) / Gần (có thể breakout)
+## Nguyên lý Bob Volman áp dụng cho H4:
+- Buildup + Break: tích lũy sát EMA 20 hoặc S/R → phá vỡ
+- False Break → Reversal: phá giả → đảo chiều mạnh
+- Squeeze vào EMA 20: giá bị ép sát EMA → breakout
+- Block Break: vùng đi ngang dày đặc → phá vỡ
+- R:R tối thiểu 1:2
 
-### 2. Nhận diện setup Bob Volman
-- **DD (Double Doji Break)**: Hai nến doji liên tiếp tại vùng hỗ trợ/kháng cự → breakout
-- **FB (First Break)**: Phá vỡ đầu tiên sau buildup sát EMA 20
-- **SB (Second Break)**: Phá vỡ thứ hai sau false break nhỏ từ FB
-- **BB (Block Break)**: Phá vỡ khỏi block (vùng giá đi ngang dày đặc)
-- **RB (Range Break)**: Phá vỡ range rõ ràng với buildup tốt
-- **IRB (Inside Range Break)**: Breakout từ range nhỏ trong range lớn
-- **ARB (Advanced Range Break)**: Breakout phức tạp với nhiều lần test biên
+## YÊU CẦU OUTPUT:
+Trả lời ĐÚNG format JSON sau, KHÔNG có text nào khác ngoài JSON:
 
-### 3. Chất lượng Price Action
-- **Buildup**: Nến nhỏ, biên độ hẹp trước breakout? Buildup tốt = tín hiệu mạnh
-- **Squeeze**: Giá bị ép sát EMA 20? Squeeze chặt = áp lực lớn
-- **Tease**: Cú test nhẹ vào vùng breakout trước khi phá thật?
-- **False break**: Cú phá giả vừa xảy ra? → thường dẫn đến move ngược mạnh
-- **Round number**: Gần số tròn quan trọng?
+{
+  "setups": [
+    {
+      "pair": "EUR/USD",
+      "direction": "LONG",
+      "setup": "Buildup + Break tại EMA 20",
+      "reasons": ["Buildup 5 nến sát EMA 20", "EMA 20 dốc lên", "False break xuống trước đó"],
+      "entry": "1.0850",
+      "stopLoss": "1.0810",
+      "takeProfit1": "1.0910",
+      "takeProfit2": "1.0950",
+      "riskReward": "1:2.5",
+      "summary": "Buildup chặt sát EMA 20 dốc lên, false break xác nhận. Entry khi phá high buildup."
+    }
+  ],
+  "noSetupReason": ""
+}
 
-### 4. Kế hoạch giao dịch (nếu có setup)
-- **Setup**: Tên setup Bob Volman
-- **Hướng**: LONG / SHORT / CHỜ
-- **Entry**: Mức giá cụ thể
-- **Stop Loss**: Sau swing high/low gần nhất (thường 8-15 pips)
-- **Take Profit**: Mức hỗ trợ/kháng cự tiếp theo hoặc round number
-- **Risk/Reward**: Tối thiểu 1:1.5
+Nếu KHÔNG có cặp nào đạt tiêu chuẩn:
+{
+  "setups": [],
+  "noSetupReason": "Thị trường choppy, không có buildup rõ ràng trên tất cả các cặp. Chờ đợi."
+}
 
-## KHUYẾN NGHỊ TỔNG HỢP (cuối cùng):
-- Xếp hạng các cặp tiền theo chất lượng setup: ⭐⭐⭐ (tốt nhất) → ⭐ (yếu nhất)
-- Chọn tối đa 1-2 cặp có setup tốt nhất để trade
-- Nếu KHÔNG cặp nào có setup rõ ràng → nói thẳng "Không có setup, chờ đợi"
-- Thị trường choppy → cảnh báo "Không nên giao dịch lúc này"
-- Bob Volman: "Không trade cũng là một quyết định đúng"
+QUAN TRỌNG:
+- Chỉ liệt kê setup có độ tin cậy CAO
+- Entry, SL, TP phải là mức giá CỤ THỂ
+- Không trade cũng là một quyết định đúng
+- CHỈ trả về JSON, không có markdown hay text khác`;
 
-## Format:
-- Ngắn gọn, thực chiến
-- Ghi rõ mức giá cụ thể
-- Dùng ngôn ngữ Bob Volman: buildup, squeeze, tease, false break, round number
-- Trả lời bằng tiếng Việt
-
-⚠️ Lưu ý: Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư.`;
+function parseAnalysisResponse(text: string): { setups: TradeSetup[]; noSetupReason: string } {
+  const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    return {
+      setups: parsed.setups || [],
+      noSetupReason: parsed.noSetupReason || "",
+    };
+  } catch {
+    return { setups: [], noSetupReason: "Lỗi parse response từ AI. Raw: " + text.slice(0, 200) };
+  }
+}
 
 async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -106,30 +121,28 @@ async function analyzeWithClaude(screenshots: ScreenshotResult[]): Promise<strin
     .map((block) => block.text)
     .join("\n");
 }
+
 export async function analyzeAllCharts(
   screenshots: ScreenshotResult[],
-): Promise<AnalysisResult[]> {
-  let analysis: string;
+): Promise<AnalysisResult> {
+  let rawResponse: string;
   let provider: string;
 
   try {
-    console.log("  → Trying Gemini 2.5 Flash (free)...");
-    analysis = IsUseGemini ? await analyzeWithGemini(screenshots) : await analyzeWithClaude(screenshots);
-    provider = "Gemini 2.5 Flash";
-  } catch (geminiError) {
-    console.warn(`  ⚠ Gemini failed: ${geminiError instanceof Error ? geminiError.message : geminiError}`);
-    console.log("  → Falling back to Claude Sonnet 4.6...");
-    analysis = await analyzeWithClaude(screenshots);
+    console.log("  → Using Claude Sonnet 4.6...");
+    rawResponse = await analyzeWithClaude(screenshots);
     provider = "Claude Sonnet 4.6";
+  } catch (claudeError) {
+    console.warn(`  ⚠ Claude failed: ${claudeError instanceof Error ? claudeError.message : claudeError}`);
+    console.log("  → Falling back to Gemini 2.5 Flash...");
+    rawResponse = await analyzeWithGemini(screenshots);
+    provider = "Gemini 2.5 Flash";
   }
 
   console.log(`  ✓ Analyzed by ${provider}`);
 
-  return [
-    {
-      chart: { name: "Tổng hợp Forex M5", symbol: "ALL", interval: "5", description: `Bob Volman Scalping — ${provider}` },
-      analysis,
-      screenshots,
-    },
-  ];
+  const { setups, noSetupReason } = parseAnalysisResponse(rawResponse);
+  console.log(`  ✓ Found ${setups.length} high-confidence setup(s)`);
+
+  return { setups, noSetupReason, screenshots };
 }

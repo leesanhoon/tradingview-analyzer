@@ -1,55 +1,53 @@
 import type { ChartConfig } from "./types.js";
 
-const interval = "240"; // 240 minutes = 4 hours
-
 export const CHARTS: ChartConfig[] = [
-    {
-    name: `XAU/USD ${interval}`,
+  {
+    name: "XAU/USD H4",
     symbol: "OANDA:XAUUSD",
-    interval,
-    description: `Gold / US Dollar — ${interval} min`,
+    interval: "240",
+    description: "Gold / US Dollar — H4",
   },
   {
-    name: `EUR/USD ${interval}`,
+    name: "EUR/USD H4",
     symbol: "OANDA:EURUSD",
-    interval,
-    description: `Euro / US Dollar — ${interval} min`,
+    interval: "240",
+    description: "Euro / US Dollar — H4",
   },
   {
-    name: `GBP/USD ${interval}`,
+    name: "GBP/USD H4",
     symbol: "OANDA:GBPUSD",
-    interval,
-    description: `British Pound / US Dollar — ${interval} min`,
+    interval: "240",
+    description: "British Pound / US Dollar — H4",
   },
   {
-    name: `USD/JPY ${interval}`,
+    name: "USD/JPY H4",
     symbol: "OANDA:USDJPY",
-    interval,
-    description: `US Dollar / Japanese Yen — ${interval} min`,
+    interval: "240",
+    description: "US Dollar / Japanese Yen — H4",
   },
   {
-    name: `AUD/USD ${interval}`,
+    name: "AUD/USD H4",
     symbol: "OANDA:AUDUSD",
-    interval,
-    description: `Australian Dollar / US Dollar — ${interval} min`,
+    interval: "240",
+    description: "Australian Dollar / US Dollar — H4",
   },
   {
-    name: `USD/CHF ${interval}`,
+    name: "USD/CHF H4",
     symbol: "OANDA:USDCHF",
-    interval,
-    description: `US Dollar / Swiss Franc — ${interval} min`,
+    interval: "240",
+    description: "US Dollar / Swiss Franc — H4",
   },
   {
-    name: `USD/CAD ${interval}`,
+    name: "USD/CAD H4",
     symbol: "OANDA:USDCAD",
-    interval,
-    description: `US Dollar / Canadian Dollar — ${interval} min`,
+    interval: "240",
+    description: "US Dollar / Canadian Dollar — H4",
   },
   {
-    name: `NZD/USD ${interval}`,
+    name: "NZD/USD H4",
     symbol: "OANDA:NZDUSD",
-    interval,
-    description: `New Zealand Dollar / US Dollar — ${interval} min`,
+    interval: "240",
+    description: "New Zealand Dollar / US Dollar — H4",
   },
 ];
 

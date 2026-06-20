@@ -11,8 +11,21 @@ export type ScreenshotResult = {
   filepath: string;
 };
 
+export type TradeSetup = {
+  pair: string;
+  direction: "LONG" | "SHORT";
+  setup: string;
+  reasons: string[];
+  entry: string;
+  stopLoss: string;
+  takeProfit1: string;
+  takeProfit2: string;
+  riskReward: string;
+  summary: string;
+};
+
 export type AnalysisResult = {
-  chart: ChartConfig;
-  analysis: string;
+  setups: TradeSetup[];
+  noSetupReason: string;
   screenshots: ScreenshotResult[];
 };
