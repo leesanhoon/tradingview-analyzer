@@ -14,6 +14,7 @@ export type ScreenshotResult = {
 export type PairSummary = {
   pair: string;
   trend: string;
+  emaProximity?: "tại" | "gần" | "xa";
   status: string;
   confidence: number;
 };
@@ -22,6 +23,7 @@ export type TradeSetup = {
   pair: string;
   direction: "LONG" | "SHORT";
   setup: string;
+  emaTouch?: boolean;
   reasons: string[];
   risks: string[];
   confidence: number;

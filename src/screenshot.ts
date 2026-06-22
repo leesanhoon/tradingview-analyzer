@@ -65,13 +65,14 @@ async function captureChart(
     await page.waitForTimeout(CHART_RENDER_DELAY);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `${chart.symbol.replace(/[:/]/g, "_")}_${timestamp}.png`;
+    const filename = `${chart.symbol.replace(/[:/]/g, "_")}_${timestamp}.jpg`;
     const filepath = join(SCREENSHOT_DIR, filename);
 
     const buffer = await page.screenshot({
       path: filepath,
       fullPage: false,
-      type: "png",
+      type: "jpeg",
+      quality: 75,
     });
 
     return { chart, buffer: Buffer.from(buffer), filepath };

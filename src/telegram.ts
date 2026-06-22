@@ -104,9 +104,10 @@ function buildCopyableSetup(setup: TradeSetup): string {
   const arrow = setup.direction === "LONG" ? "🟢" : "🔴";
   const confidence = setup.confidence ?? 0;
   const confBar = confidence >= 80 ? "🟢🟢🟢" : confidence >= 70 ? "🟡🟡" : "🔴";
+  const emaTag = setup.emaTouch ? " 📍EMA" : "";
   const patternInfo = getPatternInfo(setup.setup);
   return [
-    `${arrow} *${setup.pair} — ${setup.direction}* (${confidence}% ${confBar})`,
+    `${arrow} *${setup.pair} — ${setup.direction}* (${confidence}% ${confBar})${emaTag}`,
     `📋 *${setup.setup}*`,
     patternInfo,
     "",
