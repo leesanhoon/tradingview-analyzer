@@ -211,14 +211,14 @@ export async function analyzeAllCharts(
   let provider: string;
 
   try {
-    console.log("  → Trying Gemini 3.5 Flash...");
-    rawResponse = await analyzeWithGemini(screenshots);
-    provider = "Gemini 3.5 Flash";
-  } catch (geminiError) {
-    console.warn(`  ⚠ Gemini failed: ${geminiError instanceof Error ? geminiError.message : geminiError}`);
-    const modelName = "Claude Sonnet 4.6";
-    console.log(`  → Falling back to ${modelName}...`);
+    console.log("  → Trying Claude Sonnet 4.6...");
     rawResponse = await analyzeWithClaude(screenshots);
+    provider = "Claude Sonnet 4.6";
+  } catch (geminiError) {
+    console.warn(`  ⚠ Claude failed: ${geminiError instanceof Error ? geminiError.message : geminiError}`);
+    const modelName = "Gemini 3.5 Flash";
+    console.log(`  → Falling back to ${modelName}...`);
+    rawResponse = await analyzeWithGemini(screenshots);
     provider = modelName;
   }
 
