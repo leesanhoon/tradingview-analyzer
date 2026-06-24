@@ -140,28 +140,40 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
-  // No setups — just notify that scan completed
+  // No setups at all from analyzer (≥70%)
   if (result.setups.length === 0) {
     await sendMessage(
-      `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền\n\n⏸ Không có setup đạt yêu cầu (≥70%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+      `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền\n\n⏸ Không có setup đạt yêu cầu (>80%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
     console.log("  → No high-confidence setups. Notification sent.");
     return;
   }
 
-  // Header — only when there are setups
+  // Header
+  const highCount = result.setups.filter((s) => (s.confidence ?? 0) > 80).length;
   await sendMessage(
-    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp — tìm thấy *${result.setups.length}* setup`,
+    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp — tìm thấy *${highCount}* setup (>80%)`,
   );
 
-  for (const setup of result.setups) {
+  const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
+
+  if (highConfSetups.length === 0) {
+    await sendMessage(
+      `⏸ Có ${result.setups.length} setup (≥70%) nhưng không có setup nào > 80%.\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+    );
+    console.log(`  → ${result.setups.length} setup(s) found but none > 80%. Skipped.`);
+    return;
+  }
+
+  for (const setup of highConfSetups) {
+    const confidence = setup.confidence ?? 0;
     const screenshot = findScreenshot(setup.pair, result.screenshots);
 
     if (screenshot) {
       try {
-        const caption = `📊 ${setup.pair} H4 — ${setup.direction}`;
+        const caption = `📊 ${setup.pair} H4 — ${setup.direction} (${confidence}% 🔥)`;
         await sendPhoto(screenshot.buffer, caption);
-        console.log(`  ✓ Sent chart: ${setup.pair}`);
+        console.log(`  ✓ Sent chart: ${setup.pair} (confidence ${confidence}%)`);
       } catch (error) {
         console.error(`  ✗ Failed to send chart ${setup.pair}:`, error);
       }
@@ -172,5 +184,5 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
-  await sendMessage(`✅ *Scan hoàn tất* — ${result.setups.length} setup(s)\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
+  await sendMessage(`✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 80%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
 }
