@@ -33,6 +33,9 @@ export type TradeSetup = {
   takeProfit2: string;
   riskReward: string;
   summary: string;
+  claudeConfirmed?: boolean;
+  claudeConfidence?: number;
+  claudeComment?: string;
 };
 
 export type AnalysisResult = {

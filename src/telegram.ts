@@ -127,7 +127,16 @@ function buildCopyableSetup(setup: TradeSetup): string {
     ...(setup.risks || []).map((r) => `  • ${r}`),
     "",
     `💡 ${setup.summary}`,
+    "",
+    buildConfirmationLine(setup),
   ].join("\n");
+}
+
+function buildConfirmationLine(setup: TradeSetup): string {
+  if (setup.claudeConfirmed === true) {
+    return `✅ *Đã xác nhận bởi Claude Sonnet 4.6* (${setup.claudeConfidence}%)${setup.claudeComment ? ` — ${setup.claudeComment}` : ""}`;
+  }
+  return `⚠️ _Chưa xác nhận bởi Claude Sonnet 4.6 (lỗi xác minh, chỉ dựa trên Gemini)_`;
 }
 
 function findScreenshot(pair: string, screenshots: ScreenshotResult[]): ScreenshotResult | undefined {
@@ -149,19 +158,25 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     return;
   }
 
+  const geminiHighConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
+  const rejectedByClaude = geminiHighConfSetups.filter((s) => s.claudeConfirmed === false);
+  const highConfSetups = geminiHighConfSetups.filter((s) => s.claudeConfirmed !== false);
+  const headerSuffix = geminiHighConfSetups.length > 0 ? " (>80%, đã đối chiếu Claude)" : " (>80%)";
+
   // Header
-  const highCount = result.setups.filter((s) => (s.confidence ?? 0) > 80).length;
   await sendMessage(
-    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp — tìm thấy *${highCount}* setup (>80%)`,
+    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp — tìm thấy *${highConfSetups.length}* setup${headerSuffix}`,
   );
 
-  const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
-
   if (highConfSetups.length === 0) {
+    const reason =
+      geminiHighConfSetups.length === 0
+        ? `Gemini không tìm thấy setup nào > 80% (chỉ có ${result.setups.length} setup ở mức ≥70%).`
+        : `Gemini tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng Claude đã *từ chối* tất cả ${rejectedByClaude.length} setup đó sau khi đối chiếu độc lập.`;
     await sendMessage(
-      `⏸ Có ${result.setups.length} setup (≥70%) nhưng không có setup nào > 80%.\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+      `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
-    console.log(`  → ${result.setups.length} setup(s) found but none > 80%. Skipped.`);
+    console.log(`  → ${reason}`);
     return;
   }
 

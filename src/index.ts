@@ -1,6 +1,6 @@
 import "./env.js";
 import { captureAllCharts } from "./screenshot.js";
-import { analyzeAllCharts } from "./analyzer.js";
+import { analyzeAllCharts, confirmHighConfidenceSetups } from "./analyzer.js";
 import { sendAllAnalyses } from "./telegram.js";
 
 async function main(): Promise<void> {
@@ -19,6 +19,15 @@ async function main(): Promise<void> {
   console.log("🤖 Analyzing charts...");
   const result = await analyzeAllCharts(screenshots);
   console.log("✓ Analysis complete\n");
+
+  const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
+  if (highConfSetups.length > 0) {
+    console.log(`🔍 Verifying ${highConfSetups.length} high-confidence setup(s) with Claude Sonnet 4.6...`);
+    const verified = await confirmHighConfidenceSetups(highConfSetups, screenshots);
+    const verifiedByPair = new Map(verified.map((s) => [s.pair, s]));
+    result.setups = result.setups.map((s) => verifiedByPair.get(s.pair) ?? s);
+    console.log("✓ Verification complete\n");
+  }
 
   console.log("📨 Sending results to Telegram...");
   await sendAllAnalyses(result);
