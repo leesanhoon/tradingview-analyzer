@@ -31,21 +31,26 @@ export function filterUpcomingWithin(
   });
 }
 
-export async function buildOddsPayload(matches: MatchInfo[]): Promise<MatchOddsPayload[]> {
-  const result: MatchOddsPayload[] = [];
+export type OddsFailure = { match: MatchInfo; message: string };
+
+export async function buildOddsPayload(
+  matches: MatchInfo[],
+): Promise<{ payload: MatchOddsPayload[]; failures: OddsFailure[] }> {
+  const payload: MatchOddsPayload[] = [];
+  const failures: OddsFailure[] = [];
 
   for (const match of matches) {
     try {
       const zip = await fetchGameZip(String(match.gameId));
       const odds = (zip as { Value?: { GE?: unknown } }).Value?.GE ?? [];
-      result.push({ ...match, odds });
+      payload.push({ ...match, odds });
       console.log(`  ✓ Lấy kèo: ${match.home} vs ${match.away} (id=${match.gameId})`);
     } catch (error) {
-      console.warn(
-        `  ⚠ Lỗi lấy kèo cho ${match.home} vs ${match.away} (id=${match.gameId}): ${error instanceof Error ? error.message : error}`,
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`  ⚠ Lỗi lấy kèo cho ${match.home} vs ${match.away} (id=${match.gameId}): ${message}`);
+      failures.push({ match, message });
     }
   }
 
-  return result;
+  return { payload, failures };
 }

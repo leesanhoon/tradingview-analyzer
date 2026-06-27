@@ -27,6 +27,15 @@ async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
   }
 }
 
+export async function notifyError(scope: string, error: unknown): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    await sendMessage(`🔴 *Lỗi: ${scope}*\n\n\`\`\`\n${message.slice(0, 3500)}\n\`\`\``);
+  } catch (notifyErr) {
+    console.error("Failed to send error notification to Telegram:", notifyErr);
+  }
+}
+
 export async function sendDocument(fileBuffer: Buffer, filename: string, caption: string): Promise<void> {
   const { chatId, api } = getTelegramConfig();
   const formData = new FormData();

@@ -1,7 +1,7 @@
 import "./env.js";
 import { captureAllCharts } from "./screenshot.js";
 import { analyzeAllCharts, confirmHighConfidenceSetups } from "./analyzer.js";
-import { sendAllAnalyses } from "./telegram.js";
+import { sendAllAnalyses, notifyError } from "./telegram.js";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
@@ -11,8 +11,7 @@ async function main(): Promise<void> {
   const screenshots = await captureAllCharts();
 
   if (screenshots.length === 0) {
-    console.error("No charts captured. Exiting.");
-    process.exit(1);
+    throw new Error("No charts captured.");
   }
   console.log(`✓ Captured ${screenshots.length} charts\n`);
 
@@ -36,7 +35,8 @@ async function main(): Promise<void> {
   console.log(`\n✅ Done! Scanned ${screenshots.length} pairs in ${elapsed}s`);
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
   console.error("Fatal error:", error);
+  await notifyError("Bob Volman H4 Scanner", error);
   process.exit(1);
 });
