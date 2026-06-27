@@ -50,6 +50,36 @@ async function main(): Promise<void> {
       minute: "2-digit",
     });
 
+  const formatMatchFilename = (home: string, away: string, kickoffUnix: number): string => {
+    const date = new Date(kickoffUnix * 1000);
+    const formatter = new Intl.DateTimeFormat("sv-SE", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const parts = formatter.formatToParts(date);
+    const dateObj = {
+      year: parts.find((p) => p.type === "year")?.value,
+      month: parts.find((p) => p.type === "month")?.value,
+      day: parts.find((p) => p.type === "day")?.value,
+      hour: parts.find((p) => p.type === "hour")?.value,
+      minute: parts.find((p) => p.type === "minute")?.value,
+    };
+
+    const sanitize = (name: string) =>
+      name
+        .trim()
+        .toUpperCase()
+        .replace(/[/\\:*?"<>|]/g, "_")
+        .replace(/\s+/g, "_");
+
+    return `${sanitize(home)}_vs_${sanitize(away)}_${dateObj.year}-${dateObj.month}-${dateObj.day}_${dateObj.hour}-${dateObj.minute}.json`;
+  };
+
   const matchListText = payload
     .slice()
     .sort((a, b) => a.kickoffUnix - b.kickoffUnix)
@@ -60,12 +90,15 @@ async function main(): Promise<void> {
     `🏆 *Dữ liệu ${payload.length} trận đấu sắp đá trong ${HOURS_WINDOW}h tới*\n\n${matchListText}`,
   );
 
-  const buffer = Buffer.from(JSON.stringify(payload, null, 2));
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const caption = `📄 File dữ liệu chi tiết (${payload.length} trận)`;
+  console.log("\n📤 Gửi từng file trận lên Telegram...");
+  for (const match of payload) {
+    const buffer = Buffer.from(JSON.stringify(match, null, 2));
+    const filename = formatMatchFilename(match.home, match.away, match.kickoffUnix);
+    const caption = `⚽ ${match.home} vs ${match.away}`;
+    await sendDocument(buffer, filename, caption);
+  }
 
-  await sendDocument(buffer, `odds-${timestamp}.json`, caption);
-  console.log(`\n✅ Đã gửi dữ liệu (${payload.length} trận) lên Telegram.`);
+  console.log(`\n✅ Đã gửi ${payload.length} file trận đấu lên Telegram.`);
 }
 
 main().catch(async (error) => {
