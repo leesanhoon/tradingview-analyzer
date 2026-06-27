@@ -13,7 +13,7 @@ import {
 import type { MatchInfo } from "./betting-types.js";
 import { formatOddsText } from "./odds-text-format.js";
 
-const HOURS_WINDOW = 5;
+const HOURS_WINDOW = 2;
 
 async function getMatches(): Promise<MatchInfo[]> {
   const cached = loadDailyMatchesCache();
