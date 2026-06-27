@@ -1,7 +1,7 @@
 {
-    "name": "tradingview-analyzer",
+    "name": "auto-signal-bot",
     "version": "1.0.0",
-    "description": "Auto-capture TradingView charts and analyze with Gemini AI, deliver via Telegram",
+    "description": "Automated signal scanner — TradingView chart analysis and sports match odds, delivered via Telegram",
     "type": "module",
     "scripts": {
         "start": "tsx src/index.ts",

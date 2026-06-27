@@ -1,8 +1,9 @@
-# TradingView Auto Analyzer
+# Auto Signal Bot
 
-Tự động chụp chart TradingView → phân tích bằng Gemini AI → gửi kết quả qua Telegram.
+Tự động quét tín hiệu và gửi thông báo qua Telegram. Gồm 2 chức năng độc lập:
 
-Chạy miễn phí trên GitHub Actions mỗi 4 giờ.
+- **Chart Analyzer**: chụp chart TradingView → phân tích bằng Gemini AI → gửi kết quả qua Telegram. Chạy miễn phí trên GitHub Actions mỗi 4 giờ.
+- **Match Odds Scanner**: quét lịch đấu đội tuyển quốc gia, lấy kèo (odds) các trận sắp đá trong vài giờ tới, gửi file JSON qua Telegram. Chạy miễn phí trên GitHub Actions mỗi giờ.
 
 ## Stack
 
