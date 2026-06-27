@@ -11,7 +11,6 @@ import {
   cleanupExpiredOddsCache,
 } from "./cache.js";
 import type { MatchInfo } from "./betting-types.js";
-import { sendDailyCurlTemplates } from "./curl-templates.js";
 import { formatOddsText } from "./odds-text-format.js";
 
 const HOURS_WINDOW = 5;
@@ -37,8 +36,6 @@ async function main(): Promise<void> {
   cleanupExpiredOddsCache();
 
   const matches = await getMatches();
-
-  await sendDailyCurlTemplates(matches);
 
   const upcoming = filterUpcomingWithin(matches, HOURS_WINDOW);
   console.log(`✓ ${upcoming.length} trận sắp đá trong ${HOURS_WINDOW}h tới\n`);
