@@ -40,10 +40,29 @@ async function main(): Promise<void> {
     );
   }
 
+  const formatKickoff = (unixSeconds: number) =>
+    new Date(unixSeconds * 1000).toLocaleString("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const matchListText = payload
+    .slice()
+    .sort((a, b) => a.kickoffUnix - b.kickoffUnix)
+    .map((m, i) => `${i + 1}. ⏰ *${formatKickoff(m.kickoffUnix)}*\n   🏟 ${m.home} vs ${m.away}`)
+    .join("\n\n");
+
+  await sendMessage(
+    `🏆 *Kèo ${payload.length} trận sắp đá trong ${HOURS_WINDOW}h tới*\n\n${matchListText}`,
+  );
+
   const buffer = Buffer.from(JSON.stringify(payload, null, 2));
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const matchNames = payload.map((m) => `${m.home} vs ${m.away}`).join(", ");
-  const caption = `🏆 Kèo ${payload.length} trận sắp đá trong ${HOURS_WINDOW}h tới: ${matchNames}`;
+  const caption = `📄 File kèo chi tiết (${payload.length} trận)`;
 
   await sendDocument(buffer, `odds-${timestamp}.json`, caption);
   console.log(`\n✅ Đã gửi file kèo (${payload.length} trận) lên Telegram.`);
