@@ -12,7 +12,7 @@ import {
 } from "./cache.js";
 import type { MatchInfo } from "./betting-types.js";
 
-const HOURS_WINDOW = 12;
+const HOURS_WINDOW = 5;
 
 async function getMatches(): Promise<MatchInfo[]> {
   const cached = loadDailyMatchesCache();
