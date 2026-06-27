@@ -3,7 +3,7 @@ import { fetchGamesByChamp } from "./betting-api.js";
 import { extractMatches, filterUpcomingWithin, buildOddsPayload } from "./betting.js";
 import { sendMessage, sendDocument, notifyError } from "./telegram.js";
 
-const HOURS_WINDOW = 4;
+const HOURS_WINDOW = 12;
 
 async function main(): Promise<void> {
   console.log("🏆 Match Odds Scanner — Starting...\n");
