@@ -26,14 +26,20 @@ export function extractMatches(raw: unknown): MatchInfo[] {
 
 export function filterUpcomingWithin(
   matches: MatchInfo[],
-  hours: number,
+  minutes: number,
   now: number = Date.now(),
 ): MatchInfo[] {
-  const windowMs = hours * 60 * 60 * 1000;
+  const windowMs = minutes * 60 * 1000;
   return matches.filter((m) => {
     const diff = m.kickoffUnix * 1000 - now;
     return diff > 0 && diff <= windowMs;
   });
+}
+
+export function formatWindowLabel(minutes: number): string {
+  if (minutes < 60) return `${minutes} phút`;
+  const hours = minutes / 60;
+  return Number.isInteger(hours) ? `${hours} giờ` : `${hours.toFixed(2)} giờ`;
 }
 
 export type OddsFailure = { match: MatchInfo; message: string };

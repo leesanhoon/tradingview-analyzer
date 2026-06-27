@@ -1,6 +1,6 @@
 import "./env.js";
 import { fetchEvents, getConfiguredBookmaker } from "./betting-api.js";
-import { extractMatches, filterUpcomingWithin, buildOddsPayload } from "./betting.js";
+import { extractMatches, filterUpcomingWithin, buildOddsPayload, formatWindowLabel } from "./betting.js";
 import { sendMessage, notifyError } from "./telegram.js";
 import {
   loadDailyMatchesCache,
@@ -13,7 +13,7 @@ import {
 import type { MatchInfo } from "./betting-types.js";
 import { formatOddsText } from "./odds-text-format.js";
 
-const HOURS_WINDOW = 0.75;
+const WINDOW_MINUTES = 45;
 
 async function getMatches(): Promise<MatchInfo[]> {
   const cached = loadDailyMatchesCache();
@@ -37,8 +37,9 @@ async function main(): Promise<void> {
 
   const matches = await getMatches();
 
-  const upcoming = filterUpcomingWithin(matches, HOURS_WINDOW);
-  console.log(`✓ ${upcoming.length} trận sắp đá trong ${HOURS_WINDOW}h tới\n`);
+  const windowLabel = formatWindowLabel(WINDOW_MINUTES);
+  const upcoming = filterUpcomingWithin(matches, WINDOW_MINUTES);
+  console.log(`✓ ${upcoming.length} trận sắp đá trong ${windowLabel} tới\n`);
 
   const needsFetch = upcoming.filter((m) => !hasOddsCache(m.gameId));
   const alreadyCached = upcoming.length - needsFetch.length;
@@ -80,15 +81,15 @@ async function main(): Promise<void> {
 
   const statusText =
     upcoming.length === 0
-      ? `⏸ Không có trận nào sắp đá trong ${HOURS_WINDOW}h tới.`
+      ? `⏸ Không có trận nào sắp đá trong ${windowLabel} tới.`
       : newPayload.length > 0
-        ? `🏆 *${newPayload.length} trận mới lấy được kèo* (${alreadyCached} trận đã cache từ trước, trong ${HOURS_WINDOW}h tới):\n\n` +
+        ? `🏆 *${newPayload.length} trận mới lấy được kèo* (${alreadyCached} trận đã cache từ trước, trong ${windowLabel} tới):\n\n` +
           newPayload
             .slice()
             .sort((a, b) => a.kickoffUnix - b.kickoffUnix)
             .map((m, i) => `${i + 1}. ⏰ *${formatKickoff(m.kickoffUnix)}*\n   🏟 ${m.home} vs ${m.away}`)
             .join("\n\n")
-        : `⏸ ${upcoming.length} trận trong ${HOURS_WINDOW}h tới, không có trận nào mới (đã cache hết).`;
+        : `⏸ ${upcoming.length} trận trong ${windowLabel} tới, không có trận nào mới (đã cache hết).`;
 
   await sendMessage(statusText);
 
