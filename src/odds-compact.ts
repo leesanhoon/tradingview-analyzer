@@ -10,7 +10,13 @@ export const NAME_LEGEND =
   "btts (Both Teams Score) là kèo GG/NG. team_goals_home/team_goals_away là Tài Xỉu số bàn thắng riêng của từng đội (Total - Home / Total - Away).";
 
 const EQUILIBRIUM_PRICE_RANGE = { low: 1.8, high: 2.0 };
-const KEEP_LEVELS_RADIUS = 2;
+const MIN_TOTALS_PRICE = 1.7;
+/** Mốc handicap "giữa" — luôn giữ, không cần xét vùng giá trị. */
+const MIDDLE_HANDICAP_LEVELS = [0.75, 1];
+/** Mốc handicap "biên" — chỉ giữ khi odds nằm trong vùng giá trị (equilibrium). */
+const EDGE_HANDICAP_LEVELS = [0, 0.25, 1.25];
+/** Mốc Corners HCP lệch quá xa — luôn bỏ dù ở vùng giá trị nào. */
+const EXTREME_CORNERS_HANDICAP_LEVELS = [1.5, 2];
 
 function findBet(bets: ApiFootballBet[], name: string): ApiFootballBet | undefined {
   return bets.find((b) => b.name.toLowerCase() === name.toLowerCase());
@@ -24,44 +30,6 @@ function compact3Way(bet: ApiFootballBet | undefined): CompactOutcome[] {
     .map((v) => ({ name: map[v.value], price: Number(v.odd) }));
 }
 
-function distanceToRange(price: number, low: number, high: number): number {
-  if (price >= low && price <= high) return 0;
-  return price < low ? low - price : price - high;
-}
-
-/** Tìm point có giá gần equilibrium [low, high] nhất, dùng làm tâm để cắt bỏ mốc cực đoan. */
-function findEquilibriumPoint<T extends { point: number; price: number }>(parsed: T[]): number {
-  const minDistByPoint = new Map<number, number>();
-  for (const p of parsed) {
-    const dist = distanceToRange(p.price, EQUILIBRIUM_PRICE_RANGE.low, EQUILIBRIUM_PRICE_RANGE.high);
-    const existing = minDistByPoint.get(p.point);
-    if (existing === undefined || dist < existing) minDistByPoint.set(p.point, dist);
-  }
-
-  let bestPoint = parsed[0].point;
-  let bestDist = Infinity;
-  for (const [point, dist] of minDistByPoint) {
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestPoint = point;
-    }
-  }
-  return bestPoint;
-}
-
-/** Chỉ giữ các point trong vòng `radius` mốc (level) liền kề equilibrium trong danh sách point đã sort. */
-function keepLevelsAroundEquilibrium<T extends { point: number; price: number }>(
-  parsed: T[],
-  equilibrium: number,
-  radius: number,
-): Set<number> {
-  const sortedPoints = [...new Set(parsed.map((p) => p.point))].sort((a, b) => a - b);
-  const eqIndex = sortedPoints.indexOf(equilibrium);
-  const from = Math.max(0, eqIndex - radius);
-  const to = Math.min(sortedPoints.length - 1, eqIndex + radius);
-  return new Set(sortedPoints.slice(from, to + 1));
-}
-
 /** "Home -1" / "Away +0.5" -> { side: "H"|"A", point: number }. */
 function parseSidePoint(value: string): { side: "H" | "A"; point: number } | null {
   const m = value.match(/^(Home|Away)\s+([+-]?\d+(?:\.\d+)?)$/);
@@ -69,8 +37,11 @@ function parseSidePoint(value: string): { side: "H" | "A"; point: number } | nul
   return { side: m[1] === "Home" ? "H" : "A", point: Number(m[2]) };
 }
 
-/** "Asian Handicap" — chỉ giữ ±2 mốc quanh equilibrium, bỏ mốc cực đoan (vd H+5, A-5.5). */
-function compactHandicap(bet: ApiFootballBet | undefined): CompactOutcome[] {
+/**
+ * "Asian Handicap" — giữ mốc giữa (±0.75, ±1) luôn, mốc biên (0, ±0.25, ±1.25) chỉ giữ khi
+ * odds nằm trong vùng giá trị (equilibrium); với Corners HCP còn bỏ thêm mốc lệch quá xa (±1.5, ±2).
+ */
+function compactHandicap(bet: ApiFootballBet | undefined, isCorners = false): CompactOutcome[] {
   if (!bet) return [];
   const parsed = bet.values
     .map((v) => {
@@ -81,10 +52,16 @@ function compactHandicap(bet: ApiFootballBet | undefined): CompactOutcome[] {
 
   if (parsed.length === 0) return [];
 
-  const equilibrium = findEquilibriumPoint(parsed);
-  const keepPoints = keepLevelsAroundEquilibrium(parsed, equilibrium, KEEP_LEVELS_RADIUS);
   return parsed
-    .filter((p) => keepPoints.has(p.point))
+    .filter((p) => {
+      const abs = Math.abs(p.point);
+      if (isCorners && EXTREME_CORNERS_HANDICAP_LEVELS.includes(abs)) return false;
+      if (MIDDLE_HANDICAP_LEVELS.includes(abs)) return true;
+      if (EDGE_HANDICAP_LEVELS.includes(abs)) {
+        return p.price >= EQUILIBRIUM_PRICE_RANGE.low && p.price <= EQUILIBRIUM_PRICE_RANGE.high;
+      }
+      return false;
+    })
     .map((p) => ({ name: p.side, price: p.price, point: p.point }));
 }
 
@@ -95,7 +72,7 @@ function parseTotalPoint(value: string): { side: "Over" | "Under"; point: number
   return { side: m[1] as "Over" | "Under", point: Number(m[2]) };
 }
 
-/** "Goals Over/Under" — chỉ giữ ±2 mốc quanh equilibrium, bỏ mốc cực đoan (vd O7.5, U0.5). */
+/** "Goals Over/Under" — chỉ giữ mốc có odds (Over và Under) đều ≥ 1.70, bỏ mốc lệch quá xa. */
 function compactTotals(bet: ApiFootballBet | undefined): CompactOutcome[] {
   if (!bet) return [];
   const parsed = bet.values
@@ -107,10 +84,14 @@ function compactTotals(bet: ApiFootballBet | undefined): CompactOutcome[] {
 
   if (parsed.length === 0) return [];
 
-  const equilibrium = findEquilibriumPoint(parsed);
-  const keepPoints = keepLevelsAroundEquilibrium(parsed, equilibrium, KEEP_LEVELS_RADIUS);
+  const minPriceByPoint = new Map<number, number>();
+  for (const p of parsed) {
+    const existing = minPriceByPoint.get(p.point);
+    if (existing === undefined || p.price < existing) minPriceByPoint.set(p.point, p.price);
+  }
+
   return parsed
-    .filter((p) => keepPoints.has(p.point))
+    .filter((p) => (minPriceByPoint.get(p.point) ?? 0) >= MIN_TOTALS_PRICE)
     .map((p) => ({ name: p.side, price: p.price, point: p.point }));
 }
 
@@ -164,7 +145,7 @@ export function compactOdds(bets: ApiFootballBet[], updateIso: string | undefine
   pushIfNotEmpty(markets, "team_goals_home", compactTotals(findBet(bets, "Total - Home")));
   pushIfNotEmpty(markets, "team_goals_away", compactTotals(findBet(bets, "Total - Away")));
   pushIfNotEmpty(markets, "corners_1x2", compact3Way(findBet(bets, "Corners 1x2")));
-  pushIfNotEmpty(markets, "corners_handicap", compactHandicap(findBet(bets, "Corners Asian Handicap")));
+  pushIfNotEmpty(markets, "corners_handicap", compactHandicap(findBet(bets, "Corners Asian Handicap"), true));
   pushIfNotEmpty(markets, "corners_totals", compactTotals(findBet(bets, "Corners Over Under")));
 
   const updatedUnix = updateIso ? Math.floor(new Date(updateIso).getTime() / 1000) : Math.floor(Date.now() / 1000);
