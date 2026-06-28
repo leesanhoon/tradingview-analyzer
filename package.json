@@ -10,7 +10,10 @@
         "test-analyze": "tsx src/test-analyze.ts",
         "match-odds": "tsx src/betting-index.ts",
         "periodic-odds": "tsx src/periodic-odds-index.ts",
-        "fetch-matches-list": "tsx src/fetch-matches-list-index.ts"
+        "fetch-matches-list": "tsx src/fetch-matches-list-index.ts",
+        "lottery": "tsx src/lottery-index.ts",
+        "lottery-backfill": "tsx src/lottery-backfill-index.ts",
+        "lottery-migrate": "tsx src/lottery-migrate-index.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.105.0",

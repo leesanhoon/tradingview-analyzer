@@ -1,0 +1,49 @@
+name: Lottery History Backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Số ngày backfill tính từ hôm nay trở về trước"
+        required: false
+        default: "365"
+
+jobs:
+  lottery-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Restore data cache
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: lottery-cache-${{ github.run_id }}
+          restore-keys: |
+            lottery-cache-
+
+      - name: Run lottery backfill
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: npm run lottery-backfill -- ${{ github.event.inputs.days }}
+
+      - name: Save data cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: lottery-cache-${{ github.run_id }}
