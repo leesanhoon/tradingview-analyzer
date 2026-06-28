@@ -11,6 +11,23 @@ function weekdayFilePath(weekday: number): string {
   return path.join(DATA_DIR, `lottery-t${weekday}.json`);
 }
 
+const LAST_SENT_FILE = path.join(DATA_DIR, "lottery-last-sent.json");
+
+/** "YYYY-MM-DD" của lần gửi Telegram gần nhất, hoặc null nếu chưa từng gửi. */
+export function getLastSentDate(): string | null {
+  try {
+    const raw = fs.readFileSync(LAST_SENT_FILE, "utf-8");
+    return (JSON.parse(raw) as { dateStr: string }).dateStr ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLastSentDate(dateStr: string): void {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(LAST_SENT_FILE, JSON.stringify({ dateStr }), "utf-8");
+}
+
 /** Đọc toàn bộ lịch sử (cả 3 miền) của đúng 1 thứ trong tuần. */
 export function loadWeekdayHistory(weekday: number): LotteryDrawRecord[] {
   try {
