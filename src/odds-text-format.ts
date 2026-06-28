@@ -124,6 +124,17 @@ export function formatOddsText(payload: MatchOddsPayload): string {
     lines.push(`CS: ${cs}`);
   }
 
+  const bttsMarket = findMarket(payload, "btts");
+  const gg = findOutcome(bttsMarket, "GG")?.price;
+  const ng = findOutcome(bttsMarket, "NG")?.price;
+  if (gg !== undefined && ng !== undefined) lines.push(`GG/NG: GG=${gg} NG=${ng}`);
+
+  const teamGoalsHomeLine = formatAsiaTotals(findMarket(payload, "team_goals_home"), "TEAM-GOALS-H");
+  if (teamGoalsHomeLine) lines.push(teamGoalsHomeLine);
+
+  const teamGoalsAwayLine = formatAsiaTotals(findMarket(payload, "team_goals_away"), "TEAM-GOALS-A");
+  if (teamGoalsAwayLine) lines.push(teamGoalsAwayLine);
+
   const cornersH2hLine = format3Way(findMarket(payload, "corners_1x2"), "CORNERS-H2H");
   if (cornersH2hLine) lines.push(cornersH2hLine);
 
@@ -178,6 +189,11 @@ export function formatMainOddsSummary(payload: MatchOddsPayload): string | undef
   const hcpText = mainHandicapText(findMarket(payload, "asia_handicap"));
   const totText = mainTotalText(findMarket(payload, "asia_totals"));
 
-  const parts = [h2hText, hcpText, totText].filter((s): s is string => s !== undefined);
+  const bttsMarket = findMarket(payload, "btts");
+  const gg = findOutcome(bttsMarket, "GG")?.price;
+  const ng = findOutcome(bttsMarket, "NG")?.price;
+  const bttsText = gg !== undefined && ng !== undefined ? `GG/NG: ${gg}/${ng}` : undefined;
+
+  const parts = [h2hText, hcpText, totText, bttsText].filter((s): s is string => s !== undefined);
   return parts.length > 0 ? parts.join("  |  ") : undefined;
 }

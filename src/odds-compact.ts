@@ -2,10 +2,12 @@ import type { ApiFootballBet } from "./betting-api.js";
 import type { CompactMarket, CompactOdds, CompactOutcome, MatchInfo } from "./betting-types.js";
 
 export const NAME_LEGEND =
-  "name codes: H=home,A=away,D=draw,O=over,U=under. KQ+TOT dùng code 2 ký tự (HO/HU/DO/DU/AO/AU = kết quả+tổng). " +
-  "Point trong asia_handicap/asia_totals/result_total_goals/corners_handicap/corners_totals giữ nguyên dấu từ nguồn. " +
-  "asia_handicap/asia_totals/corners_handicap/corners_totals chỉ giữ ±2 mốc (level) quanh equilibrium (kèo cân ~1.8-2.0), bỏ mốc cực đoan. " +
-  "corners_1x2/corners_handicap/corners_totals là kèo phạt góc (Corners 1x2 / Corners Asian Handicap / Corners Over Under).";
+  "name codes: H=home,A=away,D=draw,O=over,U=under,GG=both teams score,NG=not both teams score. " +
+  "KQ+TOT dùng code 2 ký tự (HO/HU/DO/DU/AO/AU = kết quả+tổng). " +
+  "Point trong asia_handicap/asia_totals/result_total_goals/corners_handicap/corners_totals/team_goals_home/team_goals_away giữ nguyên dấu từ nguồn. " +
+  "asia_handicap/asia_totals/corners_handicap/corners_totals/team_goals_home/team_goals_away chỉ giữ ±2 mốc (level) quanh equilibrium, bỏ mốc cực đoan. " +
+  "corners_1x2/corners_handicap/corners_totals là kèo phạt góc (Corners 1x2 / Corners Asian Handicap / Corners Over Under). " +
+  "btts (Both Teams Score) là kèo GG/NG. team_goals_home/team_goals_away là Tài Xỉu số bàn thắng riêng của từng đội (Total - Home / Total - Away).";
 
 const EQUILIBRIUM_PRICE_RANGE = { low: 1.8, high: 2.0 };
 const KEEP_LEVELS_RADIUS = 2;
@@ -137,9 +139,18 @@ function pushIfNotEmpty(markets: CompactMarket[], key: string, outcomes: Compact
   if (outcomes.length > 0) markets.push({ key, outcomes });
 }
 
+/** "Both Teams Score" — Yes/No -> GG (cả 2 đội ghi bàn) / NG (không cả 2 đội ghi bàn). */
+function compactBtts(bet: ApiFootballBet | undefined): CompactOutcome[] {
+  if (!bet) return [];
+  const map: Record<string, string> = { Yes: "GG", No: "NG" };
+  return bet.values
+    .filter((v) => map[v.value] !== undefined)
+    .map((v) => ({ name: map[v.value], price: Number(v.odd) }));
+}
+
 /**
  * Map các bet API-Football sang format compact — chỉ giữ market core cho phân tích S1
- * (H2H, Asian Handicap, Goals Over/Under, KQ+Tổng, Correct Score, Phạt góc). Bỏ BTTS/H1/H2
+ * (H2H, Asian Handicap, Goals Over/Under, KQ+Tổng, Correct Score, Phạt góc, GG/NG). Bỏ H1/H2
  * (độ ưu tiên thấp, không dùng cho main bet S1).
  */
 export function compactOdds(bets: ApiFootballBet[], updateIso: string | undefined, _match: MatchInfo): CompactOdds {
@@ -149,6 +160,9 @@ export function compactOdds(bets: ApiFootballBet[], updateIso: string | undefine
   pushIfNotEmpty(markets, "asia_handicap", compactHandicap(findBet(bets, "Asian Handicap")));
   pushIfNotEmpty(markets, "asia_totals", compactTotals(findBet(bets, "Goals Over/Under")));
   pushIfNotEmpty(markets, "result_total_goals", compactResultTotal(findBet(bets, "Result/Total Goals")));
+  pushIfNotEmpty(markets, "btts", compactBtts(findBet(bets, "Both Teams Score")));
+  pushIfNotEmpty(markets, "team_goals_home", compactTotals(findBet(bets, "Total - Home")));
+  pushIfNotEmpty(markets, "team_goals_away", compactTotals(findBet(bets, "Total - Away")));
   pushIfNotEmpty(markets, "corners_1x2", compact3Way(findBet(bets, "Corners 1x2")));
   pushIfNotEmpty(markets, "corners_handicap", compactHandicap(findBet(bets, "Corners Asian Handicap")));
   pushIfNotEmpty(markets, "corners_totals", compactTotals(findBet(bets, "Corners Over Under")));
