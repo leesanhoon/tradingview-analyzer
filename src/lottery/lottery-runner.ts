@@ -37,7 +37,7 @@ export async function runLotteryCheck(): Promise<void> {
 
   for (const region of REGIONS) {
     if (regionsAlreadyToday.has(region)) {
-      console.log(`✓ [${region}] Đã có dữ liệu hôm nay (${today.dateStr}) trong cache — bỏ qua, không fetch lại.\n`);
+      console.log(`✓ [${region}] Đã có dữ liệu hôm nay (${today.dateStr}) — bỏ qua, không fetch lại.\n`);
       continue;
     }
 
