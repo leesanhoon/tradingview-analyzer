@@ -10,7 +10,7 @@ import {
   type SentStage,
 } from "./cache.js";
 import type { MatchInfo } from "./betting-types.js";
-import { formatOddsText } from "./odds-text-format.js";
+import { formatOddsText, formatMainOddsSummary } from "./odds-text-format.js";
 
 async function getMatches(): Promise<MatchInfo[]> {
   const cached = loadDailyMatchesCache();
@@ -99,7 +99,13 @@ export async function runOddsCheck(config: OddsCheckConfig): Promise<void> {
         newPayload
           .slice()
           .sort((a, b) => a.kickoffUnix - b.kickoffUnix)
-          .map((m, i) => `${i + 1}. ⏰ *${formatKickoff(m.kickoffUnix)}*\n   🏟 ${m.home} vs ${m.away}`)
+          .map((m, i) => {
+            const mainOdds = formatMainOddsSummary(m);
+            return (
+              `${i + 1}. ⏰ *${formatKickoff(m.kickoffUnix)}*\n   🏟 ${m.home} vs ${m.away}` +
+              (mainOdds ? `\n   💰 ${mainOdds}` : "")
+            );
+          })
           .join("\n\n")
       : `⏸ [${config.label}] ${upcoming.length} trận trong ${windowLabel} tới, nhưng không lấy được kèo trận nào.`;
 

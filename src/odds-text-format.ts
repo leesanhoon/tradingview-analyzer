@@ -18,12 +18,21 @@ function fmtSignedPoint(n: number): string {
   return n > 0 ? `+${fmtNum(n)}` : fmtNum(n);
 }
 
-function formatKickoffTime(kickoffUnix: number): string {
-  return new Date(kickoffUnix * 1000).toLocaleTimeString("vi-VN", {
+/** Ngày + giờ đầy đủ, thứ tự cố định (vd: "T7 28/06 19:00"). */
+function formatKickoffDateTime(kickoffUnix: number): string {
+  const date = new Date(kickoffUnix * 1000);
+  const parts = new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("weekday")} ${get("day")}/${get("month")} ${get("hour")}:${get("minute")}`;
 }
 
 function format3Way(market: CompactMarket | undefined, label: string): string | undefined {
@@ -36,7 +45,7 @@ function format3Way(market: CompactMarket | undefined, label: string): string | 
 }
 
 /** Liệt kê đầy đủ mọi mốc Asian Handicap, sort theo point tăng dần, H rồi A mỗi mốc. */
-function formatAsiaHandicap(market: CompactMarket | undefined): string | undefined {
+function formatAsiaHandicap(market: CompactMarket | undefined, label: string): string | undefined {
   if (!market) return undefined;
   const points = [...new Set(market.outcomes.map((o) => o.point).filter((p): p is number => p !== undefined))].sort(
     (a, b) => a - b,
@@ -49,11 +58,11 @@ function formatAsiaHandicap(market: CompactMarket | undefined): string | undefin
     if (h) parts.push(`H${fmtSignedPoint(point)}=${h.price}`);
     if (a) parts.push(`A${fmtSignedPoint(point)}=${a.price}`);
   }
-  return parts.length > 0 ? `ASIA-HCP: ${parts.join(" ")}` : undefined;
+  return parts.length > 0 ? `${label}: ${parts.join(" ")}` : undefined;
 }
 
-/** Liệt kê đầy đủ mọi mốc Goals Over/Under, sort theo point tăng dần, Over rồi Under mỗi mốc. */
-function formatAsiaTotals(market: CompactMarket | undefined): string | undefined {
+/** Liệt kê đầy đủ mọi mốc Over/Under, sort theo point tăng dần, Over rồi Under mỗi mốc. */
+function formatAsiaTotals(market: CompactMarket | undefined, label: string): string | undefined {
   if (!market) return undefined;
   const points = [...new Set(market.outcomes.map((o) => o.point).filter((p): p is number => p !== undefined))].sort(
     (a, b) => a - b,
@@ -66,7 +75,7 @@ function formatAsiaTotals(market: CompactMarket | undefined): string | undefined
     if (over) parts.push(`O${fmtNum(point)}=${over.price}`);
     if (under) parts.push(`U${fmtNum(point)}=${under.price}`);
   }
-  return parts.length > 0 ? `ASIA-TOT: ${parts.join(" ")}` : undefined;
+  return parts.length > 0 ? `${label}: ${parts.join(" ")}` : undefined;
 }
 
 /** Combo Kết quả + Tổng điểm — liệt kê đầy đủ mọi mốc, dạng "H-U1.5=3.32 H-O2.5=3.0 A-U1.5=5.4 ...". */
@@ -95,16 +104,16 @@ function formatResultTotal(market: CompactMarket | undefined): string | undefine
  */
 export function formatOddsText(payload: MatchOddsPayload): string {
   const lines: string[] = [
-    `${payload.home}(H) vs ${payload.away}(A) | ${formatKickoffTime(payload.kickoffUnix)}`,
+    `${payload.home}(H) vs ${payload.away}(A) | ${formatKickoffDateTime(payload.kickoffUnix)}`,
   ];
 
   const h2hLine = format3Way(findMarket(payload, "h2h"), "H2H");
   if (h2hLine) lines.push(h2hLine);
 
-  const hcpLine = formatAsiaHandicap(findMarket(payload, "asia_handicap"));
+  const hcpLine = formatAsiaHandicap(findMarket(payload, "asia_handicap"), "ASIA-HCP");
   if (hcpLine) lines.push(hcpLine);
 
-  const totLine = formatAsiaTotals(findMarket(payload, "asia_totals"));
+  const totLine = formatAsiaTotals(findMarket(payload, "asia_totals"), "ASIA-TOT");
   if (totLine) lines.push(totLine);
 
   const kqTotLine = formatResultTotal(findMarket(payload, "result_total_goals"));
@@ -115,5 +124,60 @@ export function formatOddsText(payload: MatchOddsPayload): string {
     lines.push(`CS: ${cs}`);
   }
 
+  const cornersH2hLine = format3Way(findMarket(payload, "corners_1x2"), "CORNERS-H2H");
+  if (cornersH2hLine) lines.push(cornersH2hLine);
+
+  const cornersHcpLine = formatAsiaHandicap(findMarket(payload, "corners_handicap"), "CORNERS-HCP");
+  if (cornersHcpLine) lines.push(cornersHcpLine);
+
+  const cornersTotLine = formatAsiaTotals(findMarket(payload, "corners_totals"), "CORNERS-TOT");
+  if (cornersTotLine) lines.push(cornersTotLine);
+
   return lines.join("\n");
+}
+
+/** Mốc point gần tâm nhất trong danh sách đã sort — vì compactOdds đã trim ±2 mốc quanh equilibrium, mốc giữa chính là kèo "main". */
+function pickMainPoint(market: CompactMarket | undefined): number | undefined {
+  if (!market) return undefined;
+  const points = [...new Set(market.outcomes.map((o) => o.point).filter((p): p is number => p !== undefined))].sort(
+    (a, b) => a - b,
+  );
+  if (points.length === 0) return undefined;
+  return points[Math.floor((points.length - 1) / 2)];
+}
+
+function mainHandicapText(market: CompactMarket | undefined): string | undefined {
+  const point = pickMainPoint(market);
+  if (point === undefined) return undefined;
+  const h = market!.outcomes.find((o) => o.name === "H" && o.point === point);
+  const a = market!.outcomes.find((o) => o.name === "A" && o.point === point);
+  if (!h || !a) return undefined;
+  return `Chấp ${fmtSignedPoint(point)}: ${h.price}/${a.price}`;
+}
+
+function mainTotalText(market: CompactMarket | undefined): string | undefined {
+  const point = pickMainPoint(market);
+  if (point === undefined) return undefined;
+  const over = market!.outcomes.find((o) => o.name === "Over" && o.point === point);
+  const under = market!.outcomes.find((o) => o.name === "Under" && o.point === point);
+  if (!over || !under) return undefined;
+  return `T/X ${fmtNum(point)}: ${over.price}/${under.price}`;
+}
+
+/**
+ * Tóm tắt vài kèo main (1X2, chấp, tài xỉu — mốc gần tâm nhất) thành 1 dòng ngắn,
+ * dùng cho tin nhắn tổng hợp Telegram (không phải block copy gửi AI, nên không cần tối ưu token).
+ */
+export function formatMainOddsSummary(payload: MatchOddsPayload): string | undefined {
+  const h2h = findMarket(payload, "h2h");
+  const h = findOutcome(h2h, "H")?.price;
+  const d = findOutcome(h2h, "D")?.price;
+  const a = findOutcome(h2h, "A")?.price;
+  const h2hText = h !== undefined && d !== undefined && a !== undefined ? `1X2: ${h}/${d}/${a}` : undefined;
+
+  const hcpText = mainHandicapText(findMarket(payload, "asia_handicap"));
+  const totText = mainTotalText(findMarket(payload, "asia_totals"));
+
+  const parts = [h2hText, hcpText, totText].filter((s): s is string => s !== undefined);
+  return parts.length > 0 ? parts.join("  |  ") : undefined;
 }

@@ -3,8 +3,9 @@ import type { CompactMarket, CompactOdds, CompactOutcome, MatchInfo } from "./be
 
 export const NAME_LEGEND =
   "name codes: H=home,A=away,D=draw,O=over,U=under. KQ+TOT dùng code 2 ký tự (HO/HU/DO/DU/AO/AU = kết quả+tổng). " +
-  "Point trong asia_handicap/asia_totals/result_total_goals giữ nguyên dấu từ nguồn (Asian Handicap, Goals Over/Under). " +
-  "asia_handicap/asia_totals chỉ giữ ±2 mốc (level) quanh equilibrium (kèo cân ~1.8-2.0), bỏ mốc cực đoan.";
+  "Point trong asia_handicap/asia_totals/result_total_goals/corners_handicap/corners_totals giữ nguyên dấu từ nguồn. " +
+  "asia_handicap/asia_totals/corners_handicap/corners_totals chỉ giữ ±2 mốc (level) quanh equilibrium (kèo cân ~1.8-2.0), bỏ mốc cực đoan. " +
+  "corners_1x2/corners_handicap/corners_totals là kèo phạt góc (Corners 1x2 / Corners Asian Handicap / Corners Over Under).";
 
 const EQUILIBRIUM_PRICE_RANGE = { low: 1.8, high: 2.0 };
 const KEEP_LEVELS_RADIUS = 2;
@@ -138,7 +139,7 @@ function pushIfNotEmpty(markets: CompactMarket[], key: string, outcomes: Compact
 
 /**
  * Map các bet API-Football sang format compact — chỉ giữ market core cho phân tích S1
- * (H2H, Asian Handicap, Goals Over/Under, KQ+Tổng, Correct Score). Bỏ BTTS/H1/H2
+ * (H2H, Asian Handicap, Goals Over/Under, KQ+Tổng, Correct Score, Phạt góc). Bỏ BTTS/H1/H2
  * (độ ưu tiên thấp, không dùng cho main bet S1).
  */
 export function compactOdds(bets: ApiFootballBet[], updateIso: string | undefined, _match: MatchInfo): CompactOdds {
@@ -148,6 +149,9 @@ export function compactOdds(bets: ApiFootballBet[], updateIso: string | undefine
   pushIfNotEmpty(markets, "asia_handicap", compactHandicap(findBet(bets, "Asian Handicap")));
   pushIfNotEmpty(markets, "asia_totals", compactTotals(findBet(bets, "Goals Over/Under")));
   pushIfNotEmpty(markets, "result_total_goals", compactResultTotal(findBet(bets, "Result/Total Goals")));
+  pushIfNotEmpty(markets, "corners_1x2", compact3Way(findBet(bets, "Corners 1x2")));
+  pushIfNotEmpty(markets, "corners_handicap", compactHandicap(findBet(bets, "Corners Asian Handicap")));
+  pushIfNotEmpty(markets, "corners_totals", compactTotals(findBet(bets, "Corners Over Under")));
 
   const updatedUnix = updateIso ? Math.floor(new Date(updateIso).getTime() / 1000) : Math.floor(Date.now() / 1000);
 
