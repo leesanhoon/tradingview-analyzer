@@ -1,15 +1,14 @@
-name: Fetch Matches List
+name: Periodic Odds Scanner
 
 on:
   schedule:
-    # Chạy mỗi ngày lúc 0h UTC.
-    - cron: "0 0 * * *"
+    - cron: "0 */5 * * *"
   workflow_dispatch:
 
 jobs:
-  fetch-matches-list:
+  periodic-odds:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     environment: production
 
     steps:
@@ -33,12 +32,13 @@ jobs:
           restore-keys: |
             match-odds-cache-
 
-      - name: Run fetch matches list
+      - name: Run periodic odds scanner
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
-        run: npm run fetch-matches-list
+          API_FOOTBALL_BOOKMAKER: ${{ secrets.API_FOOTBALL_BOOKMAKER }}
+        run: npm run periodic-odds
 
       - name: Save data cache
         if: always()

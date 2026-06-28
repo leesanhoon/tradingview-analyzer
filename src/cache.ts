@@ -9,8 +9,8 @@ const SENT_MATCHES_FILE = path.join(DATA_DIR, "sent-matches.json");
 /** Coi như trận đã đá xong, có thể xóa khỏi danh sách "đã gửi". */
 const SENT_MARKER_GRACE_SECONDS = 2 * 60 * 60;
 
-/** Danh sách trận chỉ refetch tối đa 1 lần mỗi 5 giờ (≈ 5 lần/ngày). */
-const MATCHES_CACHE_TTL_MS = 5 * 60 * 60 * 1000;
+/** Danh sách trận chỉ refetch tối đa 1 lần mỗi ngày. */
+const MATCHES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type MatchesCache = { fetchedAtUnix: number; matches: MatchInfo[] };
 
@@ -33,8 +33,14 @@ export function isDailyCacheValid(cache: MatchesCache | null, now: number = Date
   return cache !== null && now - cache.fetchedAtUnix * 1000 < MATCHES_CACHE_TTL_MS;
 }
 
-/** Đánh dấu nhẹ — chỉ gameId + kickoffUnix, không lưu odds — để khỏi gửi trùng 1 trận nhiều lần trong window. */
-type SentMatchRecord = { gameId: string; kickoffUnix: number };
+/**
+ * Đánh dấu nhẹ — chỉ gameId + kickoffUnix + stage, không lưu odds — để biết 1 trận
+ * đã gửi ở giai đoạn nào rồi: "periodic" (lấy sớm, mỗi 5h, trận trong 24h tới) và
+ * "final" (lấy cuối, ngay trước kickoff) là 2 giai đoạn độc lập, mỗi trận gửi tối đa
+ * 1 lần/giai đoạn — tổng cộng tối đa 2 lần gửi Telegram/trận.
+ */
+export type SentStage = "periodic" | "final";
+type SentMatchRecord = { gameId: string; kickoffUnix: number; stage: SentStage };
 
 function loadSentMatches(now: number = Date.now()): SentMatchRecord[] {
   let records: SentMatchRecord[];
@@ -47,15 +53,18 @@ function loadSentMatches(now: number = Date.now()): SentMatchRecord[] {
   return records.filter((r) => r.kickoffUnix + SENT_MARKER_GRACE_SECONDS >= nowSeconds);
 }
 
-export function hasBeenSent(gameId: string): boolean {
-  return loadSentMatches().some((r) => r.gameId === gameId);
+export function hasBeenSent(gameId: string, stage: SentStage): boolean {
+  return loadSentMatches().some((r) => r.gameId === gameId && r.stage === stage);
 }
 
-export function markMatchesSent(matches: MatchInfo[], now: number = Date.now()): void {
+export function markMatchesSent(matches: MatchInfo[], stage: SentStage, now: number = Date.now()): void {
   if (matches.length === 0) return;
   const existing = loadSentMatches(now);
-  const newRecords = matches.map((m) => ({ gameId: m.gameId, kickoffUnix: m.kickoffUnix }));
-  const merged = [...existing, ...newRecords.filter((n) => !existing.some((e) => e.gameId === n.gameId))];
+  const newRecords = matches.map((m) => ({ gameId: m.gameId, kickoffUnix: m.kickoffUnix, stage }));
+  const merged = [
+    ...existing,
+    ...newRecords.filter((n) => !existing.some((e) => e.gameId === n.gameId && e.stage === n.stage)),
+  ];
 
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(SENT_MATCHES_FILE, JSON.stringify(merged), "utf-8");

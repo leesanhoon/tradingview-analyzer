@@ -6,7 +6,7 @@ import { notifyError } from "./telegram.js";
 
 /**
  * Entry point riêng — chỉ refresh danh sách fixtures (không đụng odds/Telegram).
- * Chạy theo cron riêng (mỗi 5 giờ) để giới hạn tần suất gọi API-Football,
+ * Chạy theo cron riêng (mỗi ngày) để giới hạn tần suất gọi API-Football,
  * độc lập với workflow check-and-send odds (chạy thường xuyên hơn).
  */
 async function main(): Promise<void> {
