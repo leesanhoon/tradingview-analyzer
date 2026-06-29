@@ -6,13 +6,17 @@ export type ApiFootballBet = { id: number; name: string; values: ApiFootballBetV
 function getConfig() {
   const apiKey = process.env.API_FOOTBALL_KEY;
   const bookmaker = process.env.API_FOOTBALL_BOOKMAKER ?? "1xBet";
-  // 1 = FIFA World Cup. Lọc ở client (không gửi season= qua query) vì free plan
-  // chặn truy vấn /fixtures có kèm season hiện tại (chỉ cho phép season 2022-2024).
-  const leagueId = Number(process.env.API_FOOTBALL_LEAGUE ?? "1");
+  // Lọc ở client (không gửi season= qua query) vì free plan chặn truy vấn
+  // /fixtures có kèm season hiện tại (chỉ cho phép season 2022-2024).
+  // 1 = World Cup, 39 = Premier League, 2 = UEFA Champions League.
+  const leagueIds = (process.env.API_FOOTBALL_LEAGUE ?? "1,39,2")
+    .split(",")
+    .map((id) => Number(id.trim()))
+    .filter((id) => !Number.isNaN(id));
   if (!apiKey) {
     throw new Error("API_FOOTBALL_KEY environment variable is required");
   }
-  return { apiKey, bookmaker, leagueId };
+  return { apiKey, bookmaker, leagueIds };
 }
 
 export function getConfiguredBookmaker(): string {
@@ -50,10 +54,10 @@ function todayDateString(): string {
  * nên phải lấy full /fixtures?date= rồi lọc `league.id` ở client.
  */
 export async function fetchFixtures(dateStr: string = todayDateString()): Promise<unknown> {
-  const { leagueId } = getConfig();
+  const { leagueIds } = getConfig();
   const json = await fetchJson(`/fixtures?date=${dateStr}`);
   const all = (json.response ?? []) as Array<{ league: { id: number } }>;
-  return { response: all.filter((f) => f.league.id === leagueId) };
+  return { response: all.filter((f) => leagueIds.includes(f.league.id)) };
 }
 
 export type FixtureOdds = { bookmakerName: string; bets: ApiFootballBet[]; updateIso?: string };
