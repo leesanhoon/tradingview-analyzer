@@ -3,7 +3,7 @@ name: Lottery Verify
 on:
   schedule:
     - cron: "45 9 * * *"
-    - cron: "55 9 * * *"
+    - cron: "50 11 * * *"
     - cron: "45 10 * * *"
   workflow_dispatch:
     inputs:
@@ -42,7 +42,7 @@ jobs:
             echo "value=${{ inputs.region }}" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "45 9 * * *" ]; then
             echo "value=mien-nam" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "55 9 * * *" ]; then
+          elif [ "${{ github.event.schedule }}" = "50 11 * * *" ]; then
             echo "value=mien-bac" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "45 10 * * *" ]; then
             echo "value=mien-trung" >> "$GITHUB_OUTPUT"
