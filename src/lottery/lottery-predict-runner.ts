@@ -84,7 +84,7 @@ export async function runLotteryPredict(): Promise<void> {
     lines.push("");
     predictions.forEach((p, i) => {
       const gapNote = p.gap > 0 ? `chưa ra lại sau ${p.gap} kỳ` : "vừa ra ở kỳ liền trước";
-      lines.push(`${RANK_MEDAL[i] ?? "▫️"} \`${p.number}\`  —  ${(p.freq * 100).toFixed(1)}% xác suất  ${overdueIcon(p.overdueRatio)} _(lịch sử ra gần nhất: ${gapNote})_`);
+      lines.push(`${RANK_MEDAL[i] ?? "▫️"} \`${p.number}\`  —  ${(p.freq * 100).toFixed(1)}% xác suất  ${overdueIcon(p.overdueRatio)} _(${gapNote})_`);
     });
     lines.push("");
     console.log(`✓ [${region}] Top ${predictions.length} số dự đoán cho ${weekdayLabel} ${target.dateStr} từ ${periodCount} kỳ.`);
