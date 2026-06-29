@@ -11,7 +11,10 @@
         "match-odds": "tsx src/betting/betting-index.ts",
         "fetch-matches-list": "tsx src/betting/fetch-matches-list-index.ts",
         "lottery": "tsx src/lottery/lottery-index.ts",
-        "lottery-backfill": "tsx src/lottery/lottery-backfill-index.ts"
+        "lottery-backfill": "tsx src/lottery/lottery-backfill-index.ts",
+        "lottery-predict": "tsx src/lottery/lottery-predict-index.ts",
+        "lottery-backtest": "tsx src/lottery/lottery-backtest-index.ts",
+        "lottery-verify": "tsx src/lottery/lottery-verify-index.ts"
     },
     "dependencies": {
         "@anthropic-ai/sdk": "^0.105.0",
