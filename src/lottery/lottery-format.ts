@@ -108,6 +108,27 @@ export function extractNums(prizes: CompactPrizes): string[] {
   return [...seen];
 }
 
+const PRIZE_LABELS: [string, (p: CompactPrizes) => string[]][] = [
+  ["Giải đặc biệt", (p) => [p.db]],
+  ["Giải nhất", (p) => [p.g1]],
+  ["Giải nhì", (p) => p.g2],
+  ["Giải ba", (p) => p.g3],
+  ["Giải tư", (p) => p.g4],
+  ["Giải năm", (p) => p.g5],
+  ["Giải sáu", (p) => p.g6],
+  ["Giải bảy", (p) => p.g7],
+];
+
+/** Tìm tên giải mà `number` (3 chữ số) khớp trong `prizes`, theo cùng quy tắc lọc với `extractNums`. */
+export function matchPrizeLabel(prizes: CompactPrizes, number: string): string | undefined {
+  for (const [label, getValues] of PRIZE_LABELS) {
+    for (const raw of getValues(prizes)) {
+      if (raw.length >= 3 && raw.slice(-3) === number) return label;
+    }
+  }
+  return undefined;
+}
+
 export type OptimizedLotteryStation = {
   /** Mã viết tắt tỉnh/đài. */
   p: string;

@@ -1,4 +1,4 @@
-import { fetchDayPage, parseWeekdayPage } from "./lottery-scraper.js";
+import { fetchActualRecords } from "./lottery-scraper.js";
 import { appendWeekdayHistory, loadWeekdayHistory } from "./lottery-repository.js";
 import { buildLotteryDataset, lotteryFilename } from "./lottery-format.js";
 import { WEEKDAY_LABELS } from "./lottery-schedule.js";
@@ -49,8 +49,7 @@ export async function runLotteryCheck(): Promise<void> {
 
     try {
       console.log(`📡 [${region}] Lấy kết quả hôm nay (${today.dateStr})...`);
-      const html = await fetchDayPage(region, today.dateStr);
-      const records = parseWeekdayPage(html, region, today.weekday).filter((r) => r.prizes.db !== "");
+      const records = await fetchActualRecords(region, today.dateStr, today.weekday);
       todayRecords.push(...records);
       console.log(`✓ [${region}] Lấy được ${records.length} bản ghi.\n`);
     } catch (error) {

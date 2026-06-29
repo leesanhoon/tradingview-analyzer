@@ -44,6 +44,16 @@ export async function fetchDayPage(region: LotteryRegion, dateStr: string): Prom
   return response.text();
 }
 
+/**
+ * Lấy + parse + lọc kết quả thật đúng 1 ngày, bỏ record rỗng (chưa quay/lỗi parse) — dùng chung
+ * cho lottery-runner/lottery-predict-runner/lottery-verify-runner thay vì mỗi nơi lặp lại
+ * `fetchDayPage` + `parseWeekdayPage` + filter riêng.
+ */
+export async function fetchActualRecords(region: LotteryRegion, dateStr: string, weekday: number): Promise<LotteryDrawRecord[]> {
+  const html = await fetchDayPage(region, dateStr);
+  return parseWeekdayPage(html, region, weekday).filter((r) => r.prizes.db !== "");
+}
+
 type Block = { dateStr: string; html: string };
 
 /**

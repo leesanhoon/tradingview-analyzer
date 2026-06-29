@@ -10,7 +10,11 @@ export type PredictionRow = {
   rank: number;
 };
 
-/** Lưu lại top N dự đoán của 1 miền/ngày vào `lottery_predictions` (upsert, dedup theo date+region+number). */
+/**
+ * Lưu lại top N dự đoán của 1 miền/ngày vào `lottery_predictions` (upsert, dedup theo date+region+number).
+ * Xoá trước các số CŨ của đúng date+region mà không còn nằm trong top N lần này — tránh sót rác/rank
+ * trùng nếu chạy lại nhiều lần trong ngày và bộ số top-N thay đổi giữa các lần chạy.
+ */
 export async function savePredictions(
   date: string,
   weekday: number,
@@ -18,6 +22,14 @@ export async function savePredictions(
   predictions: NumberPrediction[],
 ): Promise<void> {
   if (predictions.length === 0) return;
+
+  const numbers = predictions.map((p) => p.number);
+  const { error: deleteError } = await (getDb().from("lottery_predictions") as any)
+    .delete()
+    .eq("date", date)
+    .eq("region", region)
+    .not("number", "in", `(${numbers.join(",")})`);
+  if (deleteError) throw new Error(`savePredictions cleanup failed: ${deleteError.message}`);
 
   const rows = predictions.map((p, i) => ({
     date,
