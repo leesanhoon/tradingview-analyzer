@@ -9,7 +9,6 @@
         "analyze": "tsx src/charts/index.ts",
         "test-analyze": "tsx src/charts/test-analyze.ts",
         "match-odds": "tsx src/betting/betting-index.ts",
-        "periodic-odds": "tsx src/betting/periodic-odds-index.ts",
         "fetch-matches-list": "tsx src/betting/fetch-matches-list-index.ts",
         "lottery": "tsx src/lottery/lottery-index.ts",
         "lottery-backfill": "tsx src/lottery/lottery-backfill-index.ts"

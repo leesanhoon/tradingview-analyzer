@@ -2,35 +2,30 @@ import { fetchFixtureOdds } from "./betting-api.js";
 import { extractCorrectScore } from "./correct-score-api.js";
 import type { ApiFootballFixture, MatchInfo, MatchOddsPayload } from "./betting-types.js";
 import { compactOdds } from "./odds-compact.js";
+import { vnDateStr, vnTimeStr } from "../shared/vn-time.js";
 
 export function extractMatches(raw: unknown): MatchInfo[] {
   const fixtures = (raw as { response?: ApiFootballFixture[] } | undefined)?.response ?? [];
   return fixtures
     .filter((f) => f.teams.home.name && f.teams.away.name)
-    .map((f) => ({
-      gameId: String(f.fixture.id),
-      home: f.teams.home.name as string,
-      away: f.teams.away.name as string,
-      kickoffUnix: Math.floor(new Date(f.fixture.date).getTime() / 1000),
-    }));
+    .map((f) => {
+      const kickoffUnix = Math.floor(new Date(f.fixture.date).getTime() / 1000);
+      return {
+        gameId: String(f.fixture.id),
+        home: f.teams.home.name as string,
+        away: f.teams.away.name as string,
+        kickoffUnix,
+        date: vnDateStr(kickoffUnix * 1000),
+        kickoffTime: vnTimeStr(kickoffUnix * 1000),
+      };
+    });
 }
 
-export function filterUpcomingWithin(
-  matches: MatchInfo[],
-  minutes: number,
-  now: number = Date.now(),
-): MatchInfo[] {
-  const windowMs = minutes * 60 * 1000;
-  return matches.filter((m) => {
-    const diff = m.kickoffUnix * 1000 - now;
-    return diff > 0 && diff <= windowMs;
-  });
-}
-
-export function formatWindowLabel(minutes: number): string {
-  if (minutes < 60) return `${minutes} phút`;
-  const hours = minutes / 60;
-  return Number.isInteger(hours) ? `${hours} giờ` : `${hours.toFixed(2)} giờ`;
+/** Trong các trận CHƯA ĐÁ, lấy nhóm trận của ngày gần nhất sắp tới (ưu tiên hôm nay nếu còn trận). */
+export function pickNearestUpcomingDateMatches(matches: MatchInfo[]): MatchInfo[] {
+  if (matches.length === 0) return [];
+  const nearestDate = matches.slice().sort((a, b) => a.kickoffUnix - b.kickoffUnix)[0].date;
+  return matches.filter((m) => m.date === nearestDate);
 }
 
 export type OddsFailure = { match: MatchInfo; message: string };

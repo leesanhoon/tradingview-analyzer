@@ -11,6 +11,10 @@ export type MatchInfo = {
   home: string;
   away: string;
   kickoffUnix: number;
+  /** Ngày thi đấu theo giờ VN, "YYYY-MM-DD". */
+  date: string;
+  /** Giờ thi đấu theo giờ VN, "HH:mm". */
+  kickoffTime: string;
 };
 
 export type CompactOutcome = {
