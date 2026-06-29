@@ -14,18 +14,26 @@ function vnDateOffset(offsetDays: number): { dateStr: string; weekday: number } 
   return { dateStr: vnNow.toISOString().slice(0, 10), weekday: vnNow.getDay() };
 }
 
+function vnHour(): number {
+  const now = new Date();
+  const hourStr = now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh", hour: "numeric", hour12: false });
+  return Number(hourStr);
+}
+
 /**
- * Chạy lúc 19h: (1) lấy + append kết quả THẬT của hôm nay vào file đúng thứ hôm nay (giữ cache
- * luôn mới — bỏ qua fetch nếu hôm nay đã có sẵn, tránh request thừa khi chạy tay nhiều lần), và
- * (2) gửi Telegram file của NGÀY MAI (thứ kế tiếp) — để có sẵn lịch sử các lần thứ đó trước đây,
- * dùng phân tích/dự đoán TRƯỚC khi kỳ quay ngày mai diễn ra. 2 việc này độc lập.
+ * (1) Lấy + append kết quả THẬT của hôm nay vào file đúng thứ hôm nay (giữ cache luôn mới —
+ * bỏ qua fetch nếu hôm nay đã có sẵn, tránh request thừa khi chạy tay nhiều lần).
+ * (2) Gửi Telegram file data: nếu hiện tại đã sau 19h (giờ VN) thì gửi data của NGÀY MAI (để có
+ * sẵn lịch sử trước khi kỳ quay ngày mai diễn ra), còn trước 19h thì vẫn gửi data của HÔM NAY.
+ * 2 việc này độc lập.
  */
 export async function runLotteryCheck(): Promise<void> {
   const today = vnDateOffset(0);
-  const tomorrow = vnDateOffset(1);
+  const isAfter19h = vnHour() >= 19;
+  const target = isAfter19h ? vnDateOffset(1) : today;
   const todayLabel = WEEKDAY_LABELS[today.weekday];
-  const tomorrowLabel = WEEKDAY_LABELS[tomorrow.weekday];
-  console.log(`🎰 Lottery History Scanner — hôm nay ${todayLabel} ${today.dateStr}, chuẩn bị data cho ${tomorrowLabel} ${tomorrow.dateStr}\n`);
+  const targetLabel = WEEKDAY_LABELS[target.weekday];
+  console.log(`🎰 Lottery History Scanner — hôm nay ${todayLabel} ${today.dateStr}, ${isAfter19h ? "sau 19h" : "trước 19h"} nên chuẩn bị data cho ${targetLabel} ${target.dateStr}\n`);
 
   const historyToday = await loadWeekdayHistory(today.weekday);
   const regionsAlreadyToday = new Set(historyToday.filter((r) => r.date === today.dateStr).map((r) => r.region));
@@ -58,26 +66,26 @@ export async function runLotteryCheck(): Promise<void> {
 
   await appendWeekdayHistory(today.weekday, todayRecords);
 
-  const historyForTomorrow = await loadWeekdayHistory(tomorrow.weekday);
-  if (historyForTomorrow.length === 0) {
-    await sendMessage(`🎰 *Lottery History Scanner*\nChưa có dữ liệu lịch sử cho ${tomorrowLabel} (${tomorrow.dateStr}) — bỏ qua, không gửi file.`);
+  const historyForTarget = await loadWeekdayHistory(target.weekday);
+  if (historyForTarget.length === 0) {
+    await sendMessage(`🎰 *Lottery History Scanner*\nChưa có dữ liệu lịch sử cho ${targetLabel} (${target.dateStr}) — bỏ qua, không gửi file.`);
     console.log("\n✓ Không có dữ liệu để gửi.");
     return;
   }
 
   for (const region of REGIONS) {
-    const recordsForRegion = historyForTomorrow.filter((r) => r.region === region);
+    const recordsForRegion = historyForTarget.filter((r) => r.region === region);
     if (recordsForRegion.length === 0) continue;
 
-    const dataset = buildLotteryDataset(tomorrow.weekday, region, recordsForRegion);
+    const dataset = buildLotteryDataset(target.weekday, region, recordsForRegion);
     const buffer = Buffer.from(JSON.stringify(dataset, null, 0));
-    const filename = lotteryFilename(tomorrow.weekday, tomorrow.dateStr, region);
+    const filename = lotteryFilename(target.weekday, target.dateStr, region);
     await sendDocument(
       buffer,
       filename,
-      `🎰 Chuẩn bị cho ${tomorrowLabel} ${tomorrow.dateStr} — ${region} (${recordsForRegion.length} kỳ tích lũy)`,
+      `🎰 Chuẩn bị cho ${targetLabel} ${target.dateStr} — ${region} (${recordsForRegion.length} kỳ tích lũy)`,
     );
-    console.log(`✓ Đã gửi file ${filename} (${recordsForRegion.length} bản ghi, ${region}, cho ${tomorrowLabel}).`);
+    console.log(`✓ Đã gửi file ${filename} (${recordsForRegion.length} bản ghi, ${region}, cho ${targetLabel}).`);
   }
 
   console.log("\n✅ Hoàn tất.");
