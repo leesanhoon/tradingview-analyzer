@@ -4,6 +4,11 @@ export type InlineKeyboardMarkup = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 };
 
+export type TelegramCommand = {
+  command: string;
+  description: string;
+};
+
 function getTelegramConfig() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -11,6 +16,20 @@ function getTelegramConfig() {
     throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables are required");
   }
   return { token, chatId, api: `https://api.telegram.org/bot${token}` };
+}
+
+async function postTelegramApi(path: string, payload: Record<string, unknown>, errorPrefix: string): Promise<void> {
+  const { api } = getTelegramConfig();
+  const response = await fetch(`${api}/${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`${errorPrefix} failed: ${body}`);
+  }
 }
 
 export async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
@@ -47,6 +66,14 @@ export async function sendDocument(fileBuffer: Buffer, filename: string, caption
     const error = await response.text();
     throw new Error(`Telegram sendDocument failed: ${error}`);
   }
+}
+
+export async function setMyCommands(commands: TelegramCommand[]): Promise<void> {
+  await postTelegramApi("setMyCommands", { commands }, "Telegram setMyCommands");
+}
+
+export async function setChatMenuButton(): Promise<void> {
+  await postTelegramApi("setChatMenuButton", { menu_button: { type: "commands" } }, "Telegram setChatMenuButton");
 }
 
 export async function notifyError(scope: string, error: unknown): Promise<void> {
