@@ -39,10 +39,55 @@ Chạy miễn phí trên GitHub Actions mỗi 4 giờ.
    - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
    - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`
 
-### 4. Chạy thử
+### 4. Điều khiển workflow qua Telegram với Supabase Edge Function
+
+Bot hiện tại vẫn gửi kết quả qua Telegram như cũ. Để nhận lệnh ngược lại từ Telegram và trigger `workflow_dispatch`, bạn cần tạo một Edge Function làm webhook.
+
+1. Cài Supabase CLI theo [hướng dẫn chính thức](https://supabase.com/docs/guides/local-development/cli/getting-started), đăng nhập và liên kết repo với project:
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref <project-ref>
+   ```
+2. Thiết lập secrets cho function:
+   ```bash
+   npx supabase secrets set TELEGRAM_BOT_TOKEN=...
+   npx supabase secrets set TELEGRAM_CHAT_ID=...
+   npx supabase secrets set TELEGRAM_WEBHOOK_SECRET=...
+   npx supabase secrets set GITHUB_PAT=...
+   npx supabase secrets set GITHUB_OWNER=...
+   npx supabase secrets set GITHUB_REPO=...
+   npx supabase secrets set GITHUB_REF=main
+   ```
+3. `GITHUB_PAT` nên là fine-grained PAT và chỉ cấp quyền `Actions: write` cho đúng repo này.
+4. Deploy function. Cấu hình `verify_jwt = false` trong `supabase/config.toml` cho phép Telegram gọi webhook mà không cần Supabase JWT:
+   ```bash
+   npx supabase functions deploy telegram-webhook
+   ```
+5. Đăng ký webhook với Telegram:
+   ```bash
+   curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<project-ref>.functions.supabase.co/telegram-webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+   ```
+6. Gửi `/help` trong Telegram để kiểm tra webhook đã hoạt động.
+
+Function nằm tại [`supabase/functions/telegram-webhook/index.ts`](supabase/functions/telegram-webhook/index.ts).
+
+### 5. Chạy thử
 
 - Vào tab **Actions** → chọn workflow (`TradingView Chart Analysis`) → **Run workflow**
 - Hoặc đợi đến giờ chạy tự động (mỗi 4h)
+
+Sau khi deploy webhook, bạn có thể trigger nhanh qua Telegram:
+
+- `/help`
+- `/analyze`
+- `/match_odds`
+- `/fetch_matches`
+- `/lottery`
+- `/lottery_predict`
+- `/lottery_verify mien-bac`
+- `/lottery_backfill 30`
+
+Webhook chỉ chấp nhận message từ `TELEGRAM_CHAT_ID` đã cấu hình và kiểm tra thêm header `X-Telegram-Bot-Api-Secret-Token`.
 
 ## Tùy chỉnh chart
 
