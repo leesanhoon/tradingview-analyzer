@@ -6,6 +6,17 @@ export type ApiFootballFixture = {
   };
 };
 
+export type MatchAiAnalysis = {
+  match: string;
+  preferredScoreline: string;
+  scoreConfidence: number;
+  recommendation: string;
+  confidence: number;
+  keyPoints: string[];
+  risks: string[];
+  summary: string;
+};
+
 export type MatchInfo = {
   gameId: string;
   home: string;
