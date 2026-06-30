@@ -3,7 +3,16 @@ import type { AnalysisResult, PairSummary, ScreenshotResult, TradeSetup } from "
 import { extractTextFromClaudeResponse, getClaudeClient } from "../shared/claude.js";
 import { withRetry } from "../shared/retry.js";
 import { captureVerificationChartScreenshot, findChartForPair } from "./screenshot.js";
-import { getVerifyProvider, getVerifyProviderLabel } from "./verify-provider.js";
+
+const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
+const ANALYSIS_MODEL = "gemini-3.5-flash";
+
+type VerificationResult = {
+  confirmed: boolean;
+  confidence: number;
+  comment: string;
+  verifiedBy: string;
+};
 
 const SYSTEM_PROMPT = `Act as a professional price action trader who follows Bob Volman's methodology ("Understanding Price Action") and exclusively analyzes H4 charts with EMA 20. For each instrument provided, deliver a structured report comprising the following sections:
 
@@ -44,6 +53,48 @@ function clampConfidence(value: unknown): number {
   return Math.max(0, Math.min(100, Math.round(num)));
 }
 
+function detectImageMimeType(buffer: Buffer): "image/png" | "image/jpeg" {
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+
+  return "image/jpeg";
+}
+
+function buildGenerationConfig(model: string, maxOutputTokens: number) {
+  const config: {
+    temperature: number;
+    topP: number;
+    maxOutputTokens: number;
+    responseMimeType: "application/json";
+    thinkingConfig?: { thinkingBudget: number };
+  } = {
+    temperature: 0.2,
+    topP: 0.9,
+    maxOutputTokens,
+    responseMimeType: "application/json",
+  };
+
+  if (model === VERIFY_MODEL_PRIMARY) {
+    config.maxOutputTokens = Math.max(maxOutputTokens, 900);
+    config.thinkingConfig = { thinkingBudget: 128 };
+  } else {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  return config;
+}
+
 function parseAnalysisResponse(text: string): { summaries: PairSummary[]; setups: TradeSetup[]; noSetupReason: string } {
   const cleaned = extractJsonObject(text);
   try {
@@ -59,12 +110,46 @@ function parseAnalysisResponse(text: string): { summaries: PairSummary[]; setups
   }
 }
 
+function parseVerificationResponse(text: string): VerificationResult | null {
+  const cleaned = extractJsonObject(text);
+
+  try {
+    const parsed = JSON.parse(cleaned) as { confirmed?: unknown; confidence?: unknown; comment?: unknown };
+    return {
+      confirmed: Boolean(parsed.confirmed),
+      confidence: clampConfidence(parsed.confidence),
+      comment: String(parsed.comment || ""),
+      verifiedBy: "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function buildVerificationPrompt(setup: TradeSetup): string {
+  return `Check this H4 EMA20 setup against the attached chart.
+
+Setup:
+- Pair: ${setup.pair}
+- Direction: ${setup.direction}
+- Pattern: ${setup.setup}
+- Entry: ${setup.entry}
+- Stop loss: ${setup.stopLoss}
+- Take profit 1: ${setup.takeProfit1}
+- Take profit 2: ${setup.takeProfit2}
+- Proposed confidence: ${setup.confidence}%
+- Reasons: ${setup.reasons.slice(0, 3).join(" | ")}
+
+Return only JSON with keys confirmed, confidence, comment.
+Keep comment short and specific.`;
+}
+
 async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<string> {
   const ai = getClient();
   const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> = [];
   for (const screenshot of screenshots) {
     parts.push({
-      inlineData: { mimeType: "image/jpeg", data: screenshot.buffer.toString("base64") },
+      inlineData: { mimeType: detectImageMimeType(screenshot.buffer), data: screenshot.buffer.toString("base64") },
     });
     parts.push({ text: `[${screenshot.chart.name}]` });
   }
@@ -72,8 +157,9 @@ async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<strin
 
   const request = () =>
     ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: ANALYSIS_MODEL,
       contents: [{ role: "user", parts }],
+      config: buildGenerationConfig(ANALYSIS_MODEL, 4000),
     });
 
   const result = await withRetry(request, {
@@ -92,25 +178,10 @@ async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<strin
 async function verifySetupWithClaude(
   setup: TradeSetup,
   chart: NonNullable<ReturnType<typeof findChartForPair>>,
-): Promise<{ confirmed: boolean; confidence: number; comment: string }> {
+): Promise<VerificationResult> {
   const ai = getClaudeClient();
   const verificationChart = await captureVerificationChartScreenshot(chart);
-
-  const userPrompt = `Check this H4 EMA20 setup against the attached chart.
-
-Setup:
-- Pair: ${setup.pair}
-- Direction: ${setup.direction}
-- Pattern: ${setup.setup}
-- Entry: ${setup.entry}
-- Stop loss: ${setup.stopLoss}
-- Take profit 1: ${setup.takeProfit1}
-- Take profit 2: ${setup.takeProfit2}
-- Proposed confidence: ${setup.confidence}%
-- Reasons: ${setup.reasons.slice(0, 3).join(" | ")}
-
-Return only JSON with keys confirmed, confidence, comment.
-Keep comment short and specific.`;
+  const userPrompt = buildVerificationPrompt(setup);
 
   const request = () =>
     ai.messages.create({
@@ -126,7 +197,7 @@ Keep comment short and specific.`;
               type: "image",
               source: {
                 type: "base64",
-                media_type: "image/jpeg",
+                media_type: detectImageMimeType(verificationChart.buffer),
                 data: verificationChart.buffer.toString("base64"),
               },
             },
@@ -154,75 +225,75 @@ Keep comment short and specific.`;
     confirmed: Boolean(parsed.confirmed),
     confidence: clampConfidence(parsed.confidence),
     comment: String(parsed.comment || ""),
+    verifiedBy: "claude-sonnet-4-6",
   };
 }
 
-async function verifySetupWithGemini(
+export async function verifySetupWithGeminiModel(
   setup: TradeSetup,
-  chart: NonNullable<ReturnType<typeof findChartForPair>>,
-): Promise<{ confirmed: boolean; confidence: number; comment: string }> {
-  const ai = getClient();
-  const verificationChart = await captureVerificationChartScreenshot(chart);
-
-  const userPrompt = `Check this H4 EMA20 setup against the attached chart.
-
-Setup:
-- Pair: ${setup.pair}
-- Direction: ${setup.direction}
-- Pattern: ${setup.setup}
-- Entry: ${setup.entry}
-- Stop loss: ${setup.stopLoss}
-- Take profit 1: ${setup.takeProfit1}
-- Take profit 2: ${setup.takeProfit2}
-- Proposed confidence: ${setup.confidence}%
-- Reasons: ${setup.reasons.slice(0, 3).join(" | ")}
-
-Return only JSON with keys confirmed, confidence, comment.
-Keep comment short and specific.`;
+  imageBuffer: Buffer,
+  model: string,
+  ai: GoogleGenAI = getClient(),
+): Promise<VerificationResult> {
+  const userPrompt = buildVerificationPrompt(setup);
 
   const request = () =>
     ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model,
       contents: [
         {
           role: "user",
           parts: [
             {
               inlineData: {
-                mimeType: "image/jpeg",
-                data: verificationChart.buffer.toString("base64"),
+                mimeType: detectImageMimeType(imageBuffer),
+                data: imageBuffer.toString("base64"),
               },
             },
             { text: userPrompt },
           ],
         },
       ],
-      config: {
-        temperature: 0.2,
-        topP: 0.9,
-        maxOutputTokens: 500,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+      config: buildGenerationConfig(model, 500),
     });
 
   const result = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
       console.warn(
-        `  ! Gemini verify temporary error for ${setup.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+        `  ! Gemini verify temporary error with ${model} for ${setup.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
       );
     },
   });
 
-  const cleaned = extractJsonObject(result.text ?? "");
-  const parsed = JSON.parse(cleaned) as Partial<{ confirmed: boolean; confidence: number; comment: string }>;
+  const parsed = parseVerificationResponse(result.text ?? "");
+  if (!parsed) {
+    throw new Error(`Gemini verify parse failed for model ${model}. Raw: ${(result.text ?? "").slice(0, 300)}`);
+  }
+
   return {
-    confirmed: Boolean(parsed.confirmed),
-    confidence: clampConfidence(parsed.confidence),
-    comment: String(parsed.comment || ""),
+    ...parsed,
+    verifiedBy: model,
   };
+}
+
+async function verifySetupWithGemini(
+  setup: TradeSetup,
+  chart: NonNullable<ReturnType<typeof findChartForPair>>,
+): Promise<VerificationResult> {
+  const verificationChart = await captureVerificationChartScreenshot(chart);
+
+  try {
+    return await verifySetupWithGeminiModel(setup, verificationChart.buffer, VERIFY_MODEL_PRIMARY);
+  } catch (primaryError) {
+    console.warn(
+      `  ! Gemini verify failed with ${VERIFY_MODEL_PRIMARY} for ${setup.pair}, falling back to Claude Sonnet 4.6: ${
+        primaryError instanceof Error ? primaryError.message : primaryError
+      }`,
+    );
+    return await verifySetupWithClaude(setup, chart);
+  }
 }
 
 /**
@@ -244,15 +315,10 @@ export async function confirmHighConfidenceSetups(
     }
 
     try {
-      const provider = getVerifyProvider();
-      const providerLabel = getVerifyProviderLabel(provider);
-      console.log(`  -> Verifying ${setup.pair} with ${providerLabel}...`);
-      const verification =
-        provider === "claude"
-          ? await verifySetupWithClaude(setup, chart)
-          : await verifySetupWithGemini(setup, chart);
+      console.log(`  -> Verifying ${setup.pair} with Gemini 2.5 Pro (fallback Claude Sonnet 4.6)...`);
+      const verification = await verifySetupWithGemini(setup, chart);
       console.log(
-        `  ${verification.confirmed ? "✓" : "✗"} ${setup.pair}: ${providerLabel} ${
+        `  ${verification.confirmed ? "✓" : "✗"} ${setup.pair}: ${verification.verifiedBy} ${
           verification.confirmed ? "confirmed" : "rejected"
         } (${verification.confidence}%) - ${verification.comment}`,
       );
@@ -261,6 +327,7 @@ export async function confirmHighConfidenceSetups(
         verifiedConfirmed: verification.confirmed,
         verifiedConfidence: verification.confidence,
         verifiedComment: verification.comment,
+        verifiedBy: verification.verifiedBy,
       });
     } catch (error) {
       console.warn(`  ! Verify failed for ${setup.pair}: ${error instanceof Error ? error.message : error}`);

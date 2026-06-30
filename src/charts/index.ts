@@ -4,7 +4,6 @@ import { analyzeAllCharts, confirmHighConfidenceSetups } from "./analyzer.js";
 import { saveOpenPosition } from "./positions-repository.js";
 import { runCheckOpenTrades } from "./check-open-trades-runner.js";
 import { sendAllAnalyses, notifyError } from "../shared/telegram.js";
-import { getVerifyProviderLabel } from "./verify-provider.js";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
@@ -24,7 +23,7 @@ async function main(): Promise<void> {
 
   const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
   if (highConfSetups.length > 0) {
-    console.log(`🔍 Verifying ${highConfSetups.length} high-confidence setup(s) with ${getVerifyProviderLabel()}...`);
+    console.log(`🔍 Verifying ${highConfSetups.length} high-confidence setup(s) with Gemini 2.5 Pro (fallback Claude Sonnet 4.6)...`);
     const verified = await confirmHighConfidenceSetups(highConfSetups, screenshots);
     const verifiedByPair = new Map(verified.map((s) => [s.pair, s]));
     result.setups = result.setups.map((s) => verifiedByPair.get(s.pair) ?? s);

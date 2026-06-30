@@ -1,5 +1,4 @@
 import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
-import { getVerifyProviderLabel } from "../charts/verify-provider.js";
 
 export type InlineKeyboardMarkup = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
@@ -192,11 +191,11 @@ function buildCopyableSetup(setup: TradeSetup): string {
 }
 
 function buildConfirmationLine(setup: TradeSetup): string {
-  const providerLabel = getVerifyProviderLabel();
   if (setup.verifiedConfirmed === true) {
-    return `✅ *Đã xác nhận bởi ${providerLabel}* (${setup.verifiedConfidence}%)${setup.verifiedComment ? ` — ${setup.verifiedComment}` : ""}`;
+    const verifiedBy = setup.verifiedBy === "claude-sonnet-4-6" ? "Claude Sonnet 4.6" : "Gemini 2.5 Pro";
+    return `✅ *Đã xác nhận bởi ${verifiedBy}* (${setup.verifiedConfidence}%)${setup.verifiedComment ? ` — ${setup.verifiedComment}` : ""}`;
   }
-  return `⚠️ _Chưa xác nhận bởi ${providerLabel} (lỗi xác minh, chỉ dựa trên Gemini 3.5 Flash)_`;
+  return `⚠️ _Chưa xác nhận bởi Gemini 2.5 Pro (lỗi xác minh, fallback Claude Sonnet 4.6)_`;
 }
 
 export function buildPositionDecisionMessage(
@@ -266,8 +265,7 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
   const geminiHighConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
   const rejectedByVerified = geminiHighConfSetups.filter((s) => s.verifiedConfirmed === false);
   const highConfSetups = geminiHighConfSetups.filter((s) => s.verifiedConfirmed !== false);
-  const providerLabel = getVerifyProviderLabel();
-  const headerSuffix = geminiHighConfSetups.length > 0 ? ` (>80%, đã đối chiếu ${providerLabel})` : " (>80%)";
+  const headerSuffix = geminiHighConfSetups.length > 0 ? " (>80%, đã đối chiếu Gemini 2.5 Pro -> Claude Sonnet 4.6)" : " (>80%)";
 
   // Header
   await sendMessage(
@@ -278,7 +276,7 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     const reason =
       geminiHighConfSetups.length === 0
         ? `Không tìm thấy setup nào > 80% (chỉ có ${result.setups.length} setup ở mức >=70%).`
-        : `Tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng ${providerLabel} đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
+        : `Tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng Gemini 2.5 Pro -> Claude Sonnet 4.6 đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
     await sendMessage(
       `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );

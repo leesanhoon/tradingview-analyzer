@@ -8,6 +8,7 @@
         "build": "tsc",
         "analyze": "tsx src/charts/index.ts",
         "test-analyze": "tsx src/charts/test-analyze.ts",
+        "test-model-compare": "tsx src/charts/test-model-compare.ts",
         "match-odds": "tsx src/betting/betting-index.ts",
         "fetch-matches-list": "tsx src/betting/fetch-matches-list-index.ts",
         "lottery": "tsx src/lottery/lottery-index.ts",
