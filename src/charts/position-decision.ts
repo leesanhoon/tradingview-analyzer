@@ -1,0 +1,182 @@
+import { GoogleGenAI } from "@google/genai";
+import type { ScreenshotResult } from "../shared/types.js";
+import { getClaudeClient, extractTextFromClaudeResponse } from "../shared/claude.js";
+import { withRetry } from "../shared/retry.js";
+import type { OpenPosition } from "./positions-repository.js";
+import { getVerifyProvider } from "./verify-provider.js";
+
+function getClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY not set");
+  }
+  return new GoogleGenAI({ apiKey });
+}
+
+function cleanResponse(text: string): string {
+  return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+}
+
+function extractJsonObject(text: string): string {
+  const cleaned = cleanResponse(text);
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    return cleaned.slice(start, end + 1);
+  }
+  return cleaned;
+}
+
+function clampConfidence(value: unknown): number {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return 0;
+  return Math.max(0, Math.min(100, Math.round(num)));
+}
+
+async function decidePositionWithClaude(
+  position: OpenPosition,
+  screenshot: ScreenshotResult,
+): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
+  const ai = getClaudeClient();
+
+  const prompt = `Review the current chart and the open trade below.
+
+Trade:
+- Pair: ${position.pair}
+- Direction: ${position.direction}
+- Setup: ${position.setup ?? ""}
+- Entry: ${position.entry}
+- Stop loss: ${position.stopLoss}
+- Take profit 1: ${position.takeProfit1}
+- Take profit 2: ${position.takeProfit2 ?? ""}
+- Reasons: ${(position.reasons ?? []).slice(0, 4).join(" | ")}
+
+Return only JSON with keys decision, confidence, comment.
+decision must be one of HOLD, CLOSE, STOP.
+Comment should be short and practical.`;
+
+  const request = () =>
+    ai.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 300,
+      temperature: 0.2,
+      system: "You manage open trades from chart evidence. Answer only with concise JSON.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: "image/jpeg",
+                data: screenshot.buffer.toString("base64"),
+              },
+            },
+            { type: "text", text: prompt },
+          ],
+        },
+      ],
+    });
+
+  const response = await withRetry(request, {
+    onRetry: (error, attempt, maxAttempts, delayMs) => {
+      console.warn(
+        `  ! Claude position decision temporary error for ${position.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    },
+  });
+
+  const cleaned = extractJsonObject(
+    extractTextFromClaudeResponse(response as { content?: Array<{ type: string; text?: string }> }),
+  );
+  const parsed = JSON.parse(cleaned) as Partial<{ decision: string; confidence: number; comment: string }>;
+  const decision = parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
+  return {
+    decision,
+    confidence: clampConfidence(parsed.confidence),
+    comment: String(parsed.comment || ""),
+  };
+}
+
+async function decidePositionWithGemini(
+  position: OpenPosition,
+  screenshot: ScreenshotResult,
+): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
+  const ai = getClient();
+
+  const prompt = `Review the current chart and the open trade below.
+
+Trade:
+- Pair: ${position.pair}
+- Direction: ${position.direction}
+- Setup: ${position.setup ?? ""}
+- Entry: ${position.entry}
+- Stop loss: ${position.stopLoss}
+- Take profit 1: ${position.takeProfit1}
+- Take profit 2: ${position.takeProfit2 ?? ""}
+- Reasons: ${(position.reasons ?? []).slice(0, 4).join(" | ")}
+
+Return only JSON with keys decision, confidence, comment.
+decision must be one of HOLD, CLOSE, STOP.
+Comment should be short and practical.`;
+
+  const request = () =>
+    ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: screenshot.buffer.toString("base64"),
+              },
+            },
+            { text: prompt },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0.2,
+        topP: 0.9,
+        maxOutputTokens: 300,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+
+  const response = await withRetry(request, {
+    onRetry: (error, attempt, maxAttempts, delayMs) => {
+      console.warn(
+        `  ! Gemini position decision temporary error for ${position.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    },
+  });
+
+  const cleaned = extractJsonObject(response.text ?? "");
+  const parsed = JSON.parse(cleaned) as Partial<{ decision: string; confidence: number; comment: string }>;
+  const decision = parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
+  return {
+    decision,
+    confidence: clampConfidence(parsed.confidence),
+    comment: String(parsed.comment || ""),
+  };
+}
+
+export async function decidePosition(
+  position: OpenPosition,
+  screenshot: ScreenshotResult,
+): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
+  const provider = getVerifyProvider();
+  return provider === "claude"
+    ? decidePositionWithClaude(position, screenshot)
+    : decidePositionWithGemini(position, screenshot);
+}
+
+export { decidePositionWithClaude };

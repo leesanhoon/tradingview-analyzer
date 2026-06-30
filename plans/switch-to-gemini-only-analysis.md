@@ -27,7 +27,7 @@ Người dùng muốn chuyển toàn bộ sang Gemini, không phụ thuộc Clau
 - Đổi tên hàm `verifySetupWithClaude` → `verifySetupWithGemini` (hoặc tên trung lập hơn `verifySetupIndependently`)
 - Bên trong: thay `new Anthropic({ apiKey })` + `client.messages.create(...)` bằng `new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })` + `ai.models.generateContent({ model: "gemini-2.5-pro", ... })`, theo đúng pattern ảnh + text đã có trong `analyzeWithGemini` (dùng `inlineData` cho ảnh thay vì `source: { type: "base64", ... }` của Anthropic)
 - Giữ nguyên `userPrompt` và cách parse JSON response (`confirmed`, `confidence`, `comment`)
-- Trong `confirmHighConfidenceSetups`: đổi log message "Verifying ... with Claude Sonnet 4.6" → "Verifying ... with Gemini 2.5 Pro", đổi field tên biến `claudeConfirmed`/`claudeConfidence`/`claudeComment` → cân nhắc đổi tên field cho khớp ý nghĩa mới (xem mục 4)
+- Trong `confirmHighConfidenceSetups`: đổi log message "Verifying ... with Claude Sonnet 4.6" → "Verifying ... with Gemini 3.5 Flash", đổi field tên biến `claudeConfirmed`/`claudeConfidence`/`claudeComment` → cân nhắc đổi tên field cho khớp ý nghĩa mới (xem mục 4)
 
 ### 4. Đổi tên field trong types & UI hiển thị (tuỳ chọn nhưng khuyến nghị)
 File [src/shared/types.ts](../src/shared/types.ts) hiện có field `claudeConfirmed`, `claudeConfidence`, `claudeComment` trong `TradeSetup`. Vì giờ verify bằng Gemini chứ không phải Claude, nên đổi tên để tránh gây hiểu nhầm:
@@ -38,7 +38,7 @@ File [src/shared/types.ts](../src/shared/types.ts) hiện có field `claudeConfi
 Đổi tương ứng tại:
 - [src/shared/types.ts](../src/shared/types.ts) — định nghĩa `TradeSetup`
 - [src/charts/analyzer.ts](../src/charts/analyzer.ts) — nơi set giá trị các field này
-- [src/shared/telegram.ts](../src/shared/telegram.ts) — hàm `buildConfirmationLine` (dòng 162-167), đổi text hiển thị từ "Đã xác nhận bởi Claude Sonnet 4.6" → "Đã xác nhận bởi Gemini 2.5 Pro", và "chỉ dựa trên Gemini" → câu phù hợp hơn (vd "chỉ dựa trên Gemini 2.5 Flash, chưa đối chiếu độc lập")
+- [src/shared/telegram.ts](../src/shared/telegram.ts) — hàm `buildConfirmationLine` (dòng 162-167), đổi text hiển thị từ "Đã xác nhận bởi Claude Sonnet 4.6" → "Đã xác nhận bởi Gemini 3.5 Flash", và "chỉ dựa trên Gemini" → câu phù hợp hơn (vd "chỉ dựa trên Gemini 2.5 Flash, chưa đối chiếu độc lập")
 
 > Nếu muốn giảm rủi ro/diff tối thiểu, có thể **giữ nguyên tên field cũ** (`claudeConfirmed`...) và chỉ đổi nội dung text hiển thị — đánh đổi là tên field gây hiểu nhầm về sau. Quyết định cuối để Codex/người review chọn khi thực thi, nhưng khuyến nghị đổi tên field cho rõ ràng.
 
@@ -75,7 +75,7 @@ if (analysis.confidence >= 70) {
     analysis.verifiedConfirmed = verification.confirmed;
     analysis.verifiedConfidence = verification.confidence;
     analysis.verifiedComment = verification.comment;
-    console.log(`  ${verification.confirmed ? "✓" : "✗"} Verify ${match.home} vs ${match.away}: Gemini 2.5 Pro ${verification.confirmed ? "confirmed" : "rejected"} (${verification.confidence}%)`);
+    console.log(`  ${verification.confirmed ? "✓" : "✗"} Verify ${match.home} vs ${match.away}: Gemini 3.5 Flash ${verification.confirmed ? "confirmed" : "rejected"} (${verification.confidence}%)`);
   } catch (error) {
     console.warn(`  ⚠ Verify failed for ${match.home} vs ${match.away}: ${error instanceof Error ? error.message : error}`);
   }
@@ -91,8 +91,8 @@ const verifyLine =
   analysis.verifiedConfirmed === undefined
     ? ""
     : analysis.verifiedConfirmed
-      ? `✅ Da xac nhan boi Gemini 2.5 Pro (${analysis.verifiedConfidence}%)${analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""}`
-      : `⚠️ Gemini 2.5 Pro khong xac nhan ket qua nay (${analysis.verifiedConfidence}%)${analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""}`;
+      ? `✅ Da xac nhan boi Gemini 3.5 Flash (${analysis.verifiedConfidence}%)${analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""}`
+      : `⚠️ Gemini 3.5 Flash khong xac nhan ket qua nay (${analysis.verifiedConfidence}%)${analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""}`;
 ```
 Thêm `verifyLine` vào mảng `lines` (sau dòng "Do ro tin hieu", trước "Keo chinh"), theo đúng style đang dùng cho `buildConfirmationLine` bên chart (file `telegram.ts`).
 
@@ -115,12 +115,12 @@ Thêm `verifyLine` vào mảng `lines` (sau dòng "Do ro tin hieu", trước "Ke
 ### Chart analysis (analyzer.ts)
 1. Chạy `npm run analyze` (hoặc `npm run test-analyze`) cục bộ với `GEMINI_API_KEY` hợp lệ, **không cần** `ANTHROPIC_API_KEY` — xác nhận chạy hết luồng không lỗi do thiếu Anthropic key.
 2. Kiểm tra log in ra đúng `"Gemini 3.5 Flash"` cho bước check, không còn nhắc tới Claude.
-3. Với setup có confidence >80%, xác nhận log "Verifying ... with Gemini 2.5 Pro" xuất hiện, và tin nhắn Telegram cuối cùng hiển thị đúng dòng xác nhận mới (không còn chữ "Claude").
+3. Với setup có confidence >80%, xác nhận log "Verifying ... with Gemini 3.5 Flash" xuất hiện, và tin nhắn Telegram cuối cùng hiển thị đúng dòng xác nhận mới (không còn chữ "Claude").
 4. Test trường hợp Gemini lỗi (vd tạm sửa sai `GEMINI_API_KEY` để giả lập) — xác nhận lỗi được `notifyError` gửi qua Telegram, không có code nào cố gọi sang Anthropic SDK nữa.
 5. Chạy `npm run build` (tsc) để đảm bảo không còn type lỗi sau khi đổi tên field (nếu chọn đổi field ở mục 4) — rà tất cả nơi tham chiếu `claudeConfirmed`/`claudeConfidence`/`claudeComment` còn sót.
 
 ### Betting / match-odds (betting-gemini.ts)
-6. Chạy `npm run match-odds` với ít nhất 1 trận có `confidence` từ bước check ≥70 — xác nhận log "Verify ... Gemini 2.5 Pro" xuất hiện, tin nhắn Telegram có thêm dòng xác nhận/từ chối.
+6. Chạy `npm run match-odds` với ít nhất 1 trận có `confidence` từ bước check ≥70 — xác nhận log "Verify ... Gemini 3.5 Flash" xuất hiện, tin nhắn Telegram có thêm dòng xác nhận/từ chối.
 7. Test 1 trận có `confidence` <70 — xác nhận **không** gọi verify (tiết kiệm quota), tin nhắn không có dòng verify.
 8. Test verify lỗi (vd tạm để model verify sai tên) — xác nhận luồng chính không bị chặn, vẫn gửi được tin nhắn với kết quả check gốc, chỉ thiếu dòng verify.
 9. Chạy `npm run build` (tsc) sau khi thêm field mới vào `MatchAiAnalysis` — đảm bảo không lỗi type ở các nơi dùng `MatchAiAnalysis`.

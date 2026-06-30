@@ -10,6 +10,17 @@ const CHART_LOAD_TIMEOUT = 30_000;
 const CHART_RENDER_DELAY = 8_000;
 const PARALLEL_TABS = 4;
 
+export function findChartForPair(pair: string) {
+  const normalized = pair.replace("/", "").toUpperCase();
+  return CHARTS.find((chart) => chart.symbol.toUpperCase().includes(normalized));
+}
+
+type CaptureOptions = {
+  viewport?: { width: number; height: number };
+  renderDelayMs?: number;
+  quality?: number;
+};
+
 export async function captureAllCharts(): Promise<ScreenshotResult[]> {
   await mkdir(SCREENSHOT_DIR, { recursive: true });
 
@@ -44,9 +55,38 @@ export async function captureAllCharts(): Promise<ScreenshotResult[]> {
   return results;
 }
 
+export async function captureChartScreenshot(
+  chart: (typeof CHARTS)[number],
+  options: CaptureOptions = {},
+): Promise<ScreenshotResult> {
+  await mkdir(SCREENSHOT_DIR, { recursive: true });
+
+  const browser = await chromium.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  try {
+    const context = await browser.newContext({ viewport: options.viewport ?? VIEWPORT });
+    return await captureChart(context, chart, options);
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function captureVerificationChartScreenshot(
+  chart: (typeof CHARTS)[number],
+): Promise<ScreenshotResult> {
+  return captureChartScreenshot(chart, {
+    viewport: { width: 1200, height: 750 },
+    renderDelayMs: 5_000,
+    quality: 55,
+  });
+}
+
 async function captureChart(
   context: BrowserContext,
   chart: (typeof CHARTS)[number],
+  options: CaptureOptions = {},
 ): Promise<ScreenshotResult> {
   const page = await context.newPage();
   const html = buildChartHtml(chart);
@@ -62,7 +102,7 @@ async function captureChart(
       }
     }
 
-    await page.waitForTimeout(CHART_RENDER_DELAY);
+    await page.waitForTimeout(options.renderDelayMs ?? CHART_RENDER_DELAY);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `${chart.symbol.replace(/[:/]/g, "_")}_${timestamp}.jpg`;
@@ -72,7 +112,7 @@ async function captureChart(
       path: filepath,
       fullPage: false,
       type: "jpeg",
-      quality: 75,
+      quality: options.quality ?? 75,
     });
 
     return { chart, buffer: Buffer.from(buffer), filepath };

@@ -1,4 +1,9 @@
 import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
+import { getVerifyProviderLabel } from "../charts/verify-provider.js";
+
+export type InlineKeyboardMarkup = {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+};
 
 function getTelegramConfig() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -9,7 +14,7 @@ function getTelegramConfig() {
   return { token, chatId, api: `https://api.telegram.org/bot${token}` };
 }
 
-async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
+export async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
   const { chatId, api } = getTelegramConfig();
   const formData = new FormData();
   formData.append("chat_id", chatId);
@@ -54,7 +59,7 @@ export async function notifyError(scope: string, error: unknown): Promise<void> 
   }
 }
 
-export async function sendMessage(text: string): Promise<void> {
+export async function sendMessage(text: string, replyMarkup?: InlineKeyboardMarkup): Promise<void> {
   const { chatId, api } = getTelegramConfig();
   const response = await fetch(`${api}/sendMessage`, {
     method: "POST",
@@ -63,6 +68,7 @@ export async function sendMessage(text: string): Promise<void> {
       chat_id: chatId,
       text,
       parse_mode: "Markdown",
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
     }),
   });
 
@@ -72,7 +78,11 @@ export async function sendMessage(text: string): Promise<void> {
       const retry = await fetch(`${api}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, text }),
+        body: JSON.stringify({
+          chat_id: chatId,
+          text,
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        }),
       });
       if (!retry.ok) {
         const retryErr = await retry.text();
@@ -81,6 +91,27 @@ export async function sendMessage(text: string): Promise<void> {
       return;
     }
     throw new Error(`Telegram sendMessage failed: ${body}`);
+  }
+}
+
+async function editMessageReplyMarkup(
+  replyMarkup: InlineKeyboardMarkup | undefined,
+  messageId: number,
+): Promise<void> {
+  const { chatId, api } = getTelegramConfig();
+  const response = await fetch(`${api}/editMessageReplyMarkup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      message_id: messageId,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Telegram editMessageReplyMarkup failed: ${body}`);
   }
 }
 
@@ -156,14 +187,61 @@ function buildCopyableSetup(setup: TradeSetup): string {
     `💡 ${setup.summary}`,
     "",
     buildConfirmationLine(setup),
+    setup.autoTracked === true ? "✅ Bot đã tự động lưu vị thế và sẽ tiếp tục theo dõi để báo khi cần đóng." : "",
   ].join("\n");
 }
 
 function buildConfirmationLine(setup: TradeSetup): string {
+  const providerLabel = getVerifyProviderLabel();
   if (setup.verifiedConfirmed === true) {
-    return `✅ *Đã xác nhận bởi Gemini 2.5 Pro* (${setup.verifiedConfidence}%)${setup.verifiedComment ? ` — ${setup.verifiedComment}` : ""}`;
+    return `✅ *Đã xác nhận bởi ${providerLabel}* (${setup.verifiedConfidence}%)${setup.verifiedComment ? ` — ${setup.verifiedComment}` : ""}`;
   }
-  return `⚠️ _Chưa xác nhận bởi Gemini 2.5 Pro (lỗi xác minh, chỉ dựa trên Gemini 3.5 Flash)_`;
+  return `⚠️ _Chưa xác nhận bởi ${providerLabel} (lỗi xác minh, chỉ dựa trên Gemini 3.5 Flash)_`;
+}
+
+export function buildPositionDecisionMessage(
+  position: {
+    id: number;
+    pair: string;
+    direction: "LONG" | "SHORT";
+    setup: string | null;
+    entry: string;
+    stopLoss: string;
+    takeProfit1: string;
+    takeProfit2: string | null;
+    reasons: string[] | null;
+    openedAt?: string | null;
+    lastDecision?: string | null;
+    lastDecisionConfidence?: number | null;
+    lastDecisionComment?: string | null;
+  },
+  decision: { decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string },
+): string {
+  const emoji = decision.decision === "HOLD" ? "🟢" : decision.decision === "CLOSE" ? "🟡" : "🔴";
+  const actionLine =
+    decision.decision === "HOLD"
+      ? "🟢 Tiếp tục giữ lệnh."
+      : "🔴 Bot đã tự động đóng vị thế trong hệ thống theo dõi.";
+  const lines = [
+    `${emoji} *Vị thế #${position.id}* — ${position.pair} ${position.direction}`,
+    position.setup ? `📋 *${position.setup}*` : "",
+    "",
+    `*Quyết định:* ${decision.decision} (${decision.confidence}%)`,
+    actionLine,
+    position.openedAt ? `*Đã mở:* ${position.openedAt}` : "",
+    `Entry: ${position.entry}`,
+    `SL: ${position.stopLoss}`,
+    `TP1: ${position.takeProfit1}`,
+    position.takeProfit2 ? `TP2: ${position.takeProfit2}` : "",
+    "",
+    `*Nhận định:* ${decision.comment || "Không có nhận xét chi tiết."}`,
+  ].filter(Boolean);
+
+  if (position.reasons && position.reasons.length > 0) {
+    lines.push("", "*Lý do gốc:*", ...position.reasons.map((reason) => `• ${reason}`));
+  }
+
+  return lines.join("\n");
 }
 
 function findScreenshot(pair: string, screenshots: ScreenshotResult[]): ScreenshotResult | undefined {
@@ -188,7 +266,8 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
   const geminiHighConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
   const rejectedByVerified = geminiHighConfSetups.filter((s) => s.verifiedConfirmed === false);
   const highConfSetups = geminiHighConfSetups.filter((s) => s.verifiedConfirmed !== false);
-  const headerSuffix = geminiHighConfSetups.length > 0 ? " (>80%, đã đối chiếu Gemini Pro)" : " (>80%)";
+  const providerLabel = getVerifyProviderLabel();
+  const headerSuffix = geminiHighConfSetups.length > 0 ? ` (>80%, đã đối chiếu ${providerLabel})` : " (>80%)";
 
   // Header
   await sendMessage(
@@ -198,8 +277,8 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
   if (highConfSetups.length === 0) {
     const reason =
       geminiHighConfSetups.length === 0
-        ? `Gemini không tìm thấy setup nào > 80% (chỉ có ${result.setups.length} setup ở mức ≥70%).`
-        : `Gemini tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng Gemini Pro đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
+        ? `Không tìm thấy setup nào > 80% (chỉ có ${result.setups.length} setup ở mức >=70%).`
+        : `Tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng ${providerLabel} đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
     await sendMessage(
       `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );

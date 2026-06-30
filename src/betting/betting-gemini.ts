@@ -1,9 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
+import { withRetry } from "../shared/retry.js";
 import type { MatchAiAnalysis, MatchOddsPayload } from "./betting-types.js";
 import { formatOddsAnalysisInput } from "./odds-text-format.js";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const VERIFY_MODEL = "gemini-2.5-pro";
+const VERIFY_MODEL = "gemini-3.5-flash";
 
 const SYSTEM_PROMPT = `Ban la chuyen gia phan tich odds bong da, uu tien ky luat va tinh thuc dung.
 
@@ -117,29 +118,41 @@ export async function analyzeMatchOdds(payload: MatchOddsPayload): Promise<Match
   const ai = getClient();
   const model = getModelName();
   const oddsText = formatOddsAnalysisInput(payload);
-  const response = await ai.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text:
-              `${SYSTEM_PROMPT}\n\n` +
-              `Match: ${payload.home} vs ${payload.away}\n` +
-              `Kickoff Unix: ${payload.kickoffUnix}\n\n` +
-              `Hay phan tich odds snapshot sau va tra ve JSON ngay bay gio.\n\n` +
-              `Odds snapshot:\n${oddsText}`,
-          },
-        ],
+
+  const request = () =>
+    ai.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text:
+                `${SYSTEM_PROMPT}\n\n` +
+                `Match: ${payload.home} vs ${payload.away}\n` +
+                `Kickoff Unix: ${payload.kickoffUnix}\n\n` +
+                `Hay phan tich odds snapshot sau va tra ve JSON ngay bay gio.\n\n` +
+                `Odds snapshot:\n${oddsText}`,
+            },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0.2,
+        topP: 0.9,
+        maxOutputTokens: 600,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
       },
-    ],
-    config: {
-      temperature: 0.2,
-      topP: 0.9,
-      maxOutputTokens: 600,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 },
+    });
+
+  const response = await withRetry(request, {
+    onRetry: (error, attempt, maxAttempts, delayMs) => {
+      console.warn(
+        `  ! Gemini match analysis temporary error for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
     },
   });
 
@@ -167,27 +180,38 @@ export async function verifyMatchAnalysis(
     summary: analysis.summary,
   };
 
-  const response = await ai.models.generateContent({
-    model: VERIFY_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text:
-              `${VERIFY_PROMPT}\n\n` +
-              `Odds snapshot:\n${oddsText}\n\n` +
-              `Phan tich can tham dinh:\n${JSON.stringify(verifyInput, null, 2)}`,
-          },
-        ],
+  const request = () =>
+    ai.models.generateContent({
+      model: VERIFY_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text:
+                `${VERIFY_PROMPT}\n\n` +
+                `Odds snapshot:\n${oddsText}\n\n` +
+                `Phan tich can tham dinh:\n${JSON.stringify(verifyInput, null, 2)}`,
+            },
+          ],
+        },
+      ],
+      config: {
+        temperature: 0.2,
+        topP: 0.9,
+        maxOutputTokens: 500,
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
       },
-    ],
-    config: {
-      temperature: 0.2,
-      topP: 0.9,
-      maxOutputTokens: 500,
-      responseMimeType: "application/json",
-      thinkingConfig: { thinkingBudget: 0 },
+    });
+
+  const response = await withRetry(request, {
+    onRetry: (error, attempt, maxAttempts, delayMs) => {
+      console.warn(
+        `  ! Gemini match verify temporary error for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
     },
   });
 

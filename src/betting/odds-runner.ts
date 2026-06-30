@@ -89,7 +89,7 @@ export async function runOddsCheck(): Promise<void> {
           analysis.verifiedConfidence = verification.confidence;
           analysis.verifiedComment = verification.comment;
           console.log(
-            `  ${verification.confirmed ? "✓" : "✗"} Verify ${match.home} vs ${match.away}: Gemini 2.5 Pro ${verification.confirmed ? "confirmed" : "rejected"} (${verification.confidence}%)`,
+            `  ${verification.confirmed ? "✓" : "✗"} Verify ${match.home} vs ${match.away}: Gemini 3.5 Flash ${verification.confirmed ? "confirmed" : "rejected"} (${verification.confidence}%)`,
           );
         } catch (error) {
           console.warn(

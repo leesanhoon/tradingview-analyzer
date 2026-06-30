@@ -9,7 +9,7 @@ Chạy miễn phí trên GitHub Actions mỗi 4 giờ.
 - **Node.js + TypeScript** — runtime & language
 - **Playwright** — headless browser chụp chart
 - **Google Gemini** — AI phân tích chart (free tier)
-- **Gemini 2.5 Pro** — xác minh chéo các setup confidence cao
+- **Gemini 3.5 Flash** — xác minh chéo các setup confidence cao
 - **Telegram Bot** — gửi kết quả + báo lỗi
 - **GitHub Actions** — scheduler miễn phí
 

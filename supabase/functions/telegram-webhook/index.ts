@@ -72,84 +72,14 @@ const COMMANDS = {
 
 function getEnv(name: string): string {
   const value = Deno.env.get(name);
-  if (!value) {
-    throw new Error(`Missing required env var: ${name}`);
-  }
+  if (!value) throw new Error(`Missing required env var: ${name}`);
   return value;
 }
 
-function buildMainMenuMessage(note?: string): string {
-  return note ?? "Chọn tác vụ bên dưới:";
-}
-
-function buildMainMenuKeyboard(): InlineKeyboardMarkup {
-  return {
-    inline_keyboard: [
-      [
-        { text: "📊 Phân tích chart", callback_data: "run:analyze" },
-        { text: "⚽ Quét kèo bóng đá", callback_data: "run:match_odds" },
-      ],
-      [
-        { text: "🎰 Quét kết quả xổ số", callback_data: "run:lottery" },
-        { text: "🔮 Dự đoán xổ số", callback_data: "run:lottery_predict" },
-      ],
-      [
-        { text: "✅ Xác minh kết quả ▸", callback_data: "menu:lottery_verify" },
-      ],
-    ],
-  };
-}
-
-function buildRegionSubmenuKeyboard(): InlineKeyboardMarkup {
-  return {
-    inline_keyboard: [
-      [
-        { text: "Miền Bắc", callback_data: "run:lottery_verify:mien-bac" },
-        { text: "Miền Trung", callback_data: "run:lottery_verify:mien-trung" },
-      ],
-      [{ text: "Miền Nam", callback_data: "run:lottery_verify:mien-nam" }],
-      [{ text: "◂ Quay lại", callback_data: "menu:main" }],
-    ],
-  };
-}
-
-function parseCallbackData(data: string): CallbackAction | null {
-  const [kind = "", scope = "", part = ""] = data.trim().split(":");
-
-  if (kind === "menu") {
-    if (scope === "main" || scope === "lottery_verify") {
-      return { type: "menu", menu: scope };
-    }
-    return null;
-  }
-
-  if (kind !== "run") {
-    return null;
-  }
-
-  if (!(scope in COMMANDS)) {
-    return null;
-  }
-
-  if (scope === "lottery_verify") {
-    return VERIFY_REGIONS.has(part)
-      ? { type: "run", command: scope, args: [part] }
-      : null;
-  }
-
-  return { type: "run", command: scope as keyof typeof COMMANDS, args: [] };
-}
-
-async function sendTelegramRequest(
-  botToken: string,
-  method: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
+async function sendTelegramRequest(botToken: string, method: string, payload: Record<string, unknown>): Promise<void> {
   const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
@@ -187,11 +117,7 @@ async function editTelegramMessage(
   });
 }
 
-async function answerTelegramCallbackQuery(
-  botToken: string,
-  callbackQueryId: string,
-  text?: string,
-): Promise<void> {
+async function answerTelegramCallbackQuery(botToken: string, callbackQueryId: string, text?: string): Promise<void> {
   await sendTelegramRequest(botToken, "answerCallbackQuery", {
     callback_query_id: callbackQueryId,
     ...(text ? { text } : {}),
@@ -206,22 +132,16 @@ async function dispatchWorkflow(
   workflow: WorkflowConfig,
   inputs: Record<string, string>,
 ): Promise<WorkflowDispatchResult | null> {
-  const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow.file}/dispatches`,
-    {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${githubToken}`,
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-      },
-      body: JSON.stringify({
-        ref,
-        inputs,
-      }),
+  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${workflow.file}/dispatches`, {
+    method: "POST",
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${githubToken}`,
+      "Content-Type": "application/json",
+      "X-GitHub-Api-Version": "2022-11-28",
     },
-  );
+    body: JSON.stringify({ ref, inputs }),
+  });
 
   if (!response.ok) {
     const body = await response.text();
@@ -229,9 +149,7 @@ async function dispatchWorkflow(
   }
 
   const rawBody = await response.text();
-  if (!rawBody) {
-    return null;
-  }
+  if (!rawBody) return null;
 
   try {
     return JSON.parse(rawBody) as WorkflowDispatchResult;
@@ -240,11 +158,61 @@ async function dispatchWorkflow(
   }
 }
 
-function buildWorkflowSummary(inputs: Record<string, string>): string {
-  if (Object.keys(inputs).length === 0) {
-    return "";
+function buildMainMenuMessage(note?: string): string {
+  return note ?? "Chọn tác vụ bên dưới:";
+}
+
+function buildMainMenuKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: "📊 Phân tích chart", callback_data: "run:analyze" },
+        { text: "⚽ Quét kèo bóng đá", callback_data: "run:match_odds" },
+      ],
+      [
+        { text: "🎰 Quét kết quả xổ số", callback_data: "run:lottery" },
+        { text: "🔮 Dự đoán xổ số", callback_data: "run:lottery_predict" },
+      ],
+      [{ text: "✅ Xác minh kết quả ▸", callback_data: "menu:lottery_verify" }],
+    ],
+  };
+}
+
+function buildRegionSubmenuKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Miền Bắc", callback_data: "run:lottery_verify:mien-bac" },
+        { text: "Miền Trung", callback_data: "run:lottery_verify:mien-trung" },
+      ],
+      [{ text: "Miền Nam", callback_data: "run:lottery_verify:mien-nam" }],
+      [{ text: "◂ Quay lại", callback_data: "menu:main" }],
+    ],
+  };
+}
+
+function parseCallbackData(data: string): CallbackAction | null {
+  const [kind = "", scope = "", part = ""] = data.trim().split(":");
+
+  if (kind === "menu") {
+    if (scope === "main" || scope === "lottery_verify") {
+      return { type: "menu", menu: scope };
+    }
+    return null;
   }
 
+  if (kind !== "run") return null;
+  if (!(scope in COMMANDS)) return null;
+
+  if (scope === "lottery_verify") {
+    return VERIFY_REGIONS.has(part) ? { type: "run", command: scope, args: [part] } : null;
+  }
+
+  return { type: "run", command: scope as keyof typeof COMMANDS, args: [] };
+}
+
+function buildWorkflowSummary(inputs: Record<string, string>): string {
+  if (Object.keys(inputs).length === 0) return "";
   return `\nInputs: ${Object.entries(inputs)
     .map(([key, value]) => `${key}=${value}`)
     .join(", ")}`;
@@ -257,7 +225,6 @@ function buildSuccessMessage(
 ): string {
   const inputSummary = buildWorkflowSummary(inputs);
   const runSummary = dispatchResult?.html_url ? `\nRun: ${dispatchResult.html_url}` : "";
-
   return `✅ Đã kích hoạt ${workflow.description} ${inputSummary}${runSummary}`;
 }
 
@@ -312,8 +279,7 @@ async function runWorkflowFromCallback(
 
   try {
     const dispatchResult = await dispatchWorkflow(githubToken, githubOwner, githubRepo, githubRef, workflow, inputs);
-    const successMessage = buildSuccessMessage(workflow, inputs, dispatchResult);
-    await editTelegramMessage(botToken, chatId, messageId, successMessage);
+    await editTelegramMessage(botToken, chatId, messageId, buildSuccessMessage(workflow, inputs, dispatchResult));
     return Response.json({ ok: true, command, workflow: workflow.file, inputs, dispatchResult });
   } catch (error) {
     const messageText = error instanceof Error ? error.message : String(error);
@@ -348,7 +314,7 @@ async function handleTelegramCallback(
     return Response.json({ ok: true, menu: action.menu });
   }
 
-  return await runWorkflowFromCallback(
+  return runWorkflowFromCallback(
     botToken,
     callbackQuery.id,
     message.chat.id,
@@ -406,14 +372,7 @@ Deno.serve(async (request) => {
         return new Response("Forbidden", { status: 403 });
       }
 
-      return await handleTelegramCallback(
-        botToken,
-        callbackQuery,
-        githubToken,
-        githubOwner,
-        githubRepo,
-        githubRef,
-      );
+      return handleTelegramCallback(botToken, callbackQuery, githubToken, githubOwner, githubRepo, githubRef);
     }
 
     return Response.json({ ok: true, ignored: "unsupported-update" });

@@ -36,6 +36,7 @@ export type TradeSetup = {
   verifiedConfirmed?: boolean;
   verifiedConfidence?: number;
   verifiedComment?: string;
+  autoTracked?: boolean;
 };
 
 export type AnalysisResult = {
