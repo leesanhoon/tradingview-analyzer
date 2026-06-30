@@ -33,11 +33,11 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
-function cleanResponse(text: string): string {
+export function cleanResponse(text: string): string {
   return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
 }
 
-function extractJsonObject(text: string): string {
+export function extractJsonObject(text: string): string {
   const cleaned = cleanResponse(text);
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
@@ -47,7 +47,7 @@ function extractJsonObject(text: string): string {
   return cleaned;
 }
 
-function clampConfidence(value: unknown): number {
+export function clampConfidence(value: unknown): number {
   const num = Number(value);
   if (!Number.isFinite(num)) return 0;
   return Math.max(0, Math.min(100, Math.round(num)));
@@ -71,7 +71,7 @@ function detectImageMimeType(buffer: Buffer): "image/png" | "image/jpeg" {
   return "image/jpeg";
 }
 
-function buildGenerationConfig(model: string, maxOutputTokens: number) {
+export function buildGenerationConfig(model: string, maxOutputTokens: number) {
   const config: {
     temperature: number;
     topP: number;
@@ -95,7 +95,7 @@ function buildGenerationConfig(model: string, maxOutputTokens: number) {
   return config;
 }
 
-function parseAnalysisResponse(text: string): { summaries: PairSummary[]; setups: TradeSetup[]; noSetupReason: string } {
+export function parseAnalysisResponse(text: string): { summaries: PairSummary[]; setups: TradeSetup[]; noSetupReason: string } {
   const cleaned = extractJsonObject(text);
   try {
     const parsed = JSON.parse(cleaned) as Partial<{ summaries: PairSummary[]; setups: TradeSetup[]; noSetupReason: string }>;

@@ -13,7 +13,7 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
-function buildGenerationConfig(model: string, maxOutputTokens: number) {
+export function buildGenerationConfig(model: string, maxOutputTokens: number) {
   const config: {
     temperature: number;
     topP: number;
@@ -34,11 +34,11 @@ function buildGenerationConfig(model: string, maxOutputTokens: number) {
   return config;
 }
 
-function cleanResponse(text: string): string {
+export function cleanResponse(text: string): string {
   return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
 }
 
-function extractJsonObject(text: string): string {
+export function extractJsonObject(text: string): string {
   const cleaned = cleanResponse(text);
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
@@ -48,10 +48,27 @@ function extractJsonObject(text: string): string {
   return cleaned;
 }
 
-function clampConfidence(value: unknown): number {
+export function clampConfidence(value: unknown): number {
   const num = Number(value);
   if (!Number.isFinite(num)) return 0;
   return Math.max(0, Math.min(100, Math.round(num)));
+}
+
+export function parseDecisionResponse(
+  text: string,
+): { decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string } | null {
+  const cleaned = extractJsonObject(text);
+  try {
+    const parsed = JSON.parse(cleaned) as Partial<{ decision: string; confidence: number; comment: string }>;
+    const decision = parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
+    return {
+      decision,
+      confidence: clampConfidence(parsed.confidence),
+      comment: String(parsed.comment || ""),
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function decidePositionWithClaude(
@@ -110,16 +127,11 @@ Comment should be short and practical.`;
     },
   });
 
-  const cleaned = extractJsonObject(
-    extractTextFromClaudeResponse(response as { content?: Array<{ type: string; text?: string }> }),
-  );
-  const parsed = JSON.parse(cleaned) as Partial<{ decision: string; confidence: number; comment: string }>;
-  const decision = parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
-  return {
-    decision,
-    confidence: clampConfidence(parsed.confidence),
-    comment: String(parsed.comment || ""),
-  };
+  const parsed = parseDecisionResponse(extractTextFromClaudeResponse(response as { content?: Array<{ type: string; text?: string }> }));
+  if (!parsed) {
+    throw new Error("Claude position decision parse failed");
+  }
+  return parsed;
 }
 
 async function decidePositionWithGemini(
@@ -175,14 +187,11 @@ Comment should be short and practical.`;
     },
   });
 
-  const cleaned = extractJsonObject(response.text ?? "");
-  const parsed = JSON.parse(cleaned) as Partial<{ decision: string; confidence: number; comment: string }>;
-  const decision = parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
-  return {
-    decision,
-    confidence: clampConfidence(parsed.confidence),
-    comment: String(parsed.comment || ""),
-  };
+  const parsed = parseDecisionResponse(response.text ?? "");
+  if (!parsed) {
+    throw new Error(`Gemini position decision parse failed for model ${model}. Raw: ${(response.text ?? "").slice(0, 300)}`);
+  }
+  return parsed;
 }
 
 export async function decidePosition(
