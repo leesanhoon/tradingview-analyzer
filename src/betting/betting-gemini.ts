@@ -4,7 +4,8 @@ import type { MatchAiAnalysis, MatchOddsPayload } from "./betting-types.js";
 import { formatOddsAnalysisInput } from "./odds-text-format.js";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const VERIFY_MODEL = "gemini-3.5-flash";
+const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
+const VERIFY_MODEL_FALLBACK = "gemini-3.5-flash";
 
 const SYSTEM_PROMPT = `Ban la chuyen gia phan tich odds bong da, uu tien ky luat va tinh thuc dung.
 
@@ -55,6 +56,18 @@ Quy tac:
 - comment ngan gon, noi ro vi sao dong y hoac bac bo.
 - Khong duoc them markdown, giai thich thua, hay key ngoai danh sach.`;
 
+const REVISE_PROMPT = `Ban la chuyen gia phan tich odds bong da, dang duoc yeu cau dua ra nhan dinh thay the
+sau khi nhan dinh truoc do bi tham dinh tu choi.
+
+Nhiem vu:
+- Chi dua tren odds snapshot va ly do tu choi duoc cung cap.
+- Khong dung kien thuc ben ngoai (tin tuc, chan thuong, phong do, bang xep hang, lich su doi dau).
+- Dua ra mot nhan dinh moi, khac voi nhan dinh cu, khac phuc duoc van de da bi tu choi.
+- Neu odds khong co edge ro rang, phai ket luan trung thuc la khong co edge ro rang voi confidence thap.
+- Tra ve duy nhat mot JSON hop le voi dung cac key: match, preferredScoreline, scoreConfidence,
+  recommendation, confidence, keyPoints, risks, summary (cung dinh nghia nhu phan tich ban dau).
+- Khong duoc them markdown, loi chao, giai thich thua, hay key ngoai danh sach.`;
+
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("GEMINI_API_KEY not set");
@@ -63,6 +76,30 @@ function getClient(): GoogleGenAI {
 
 function getModelName(): string {
   return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+}
+
+function buildGenerationConfig(model: string, maxOutputTokens: number) {
+  const config: {
+    temperature: number;
+    topP: number;
+    maxOutputTokens: number;
+    responseMimeType: "application/json";
+    thinkingConfig?: { thinkingBudget: number };
+  } = {
+    temperature: 0.2,
+    topP: 0.9,
+    maxOutputTokens,
+    responseMimeType: "application/json",
+  };
+
+  if (model === "gemini-2.5-pro") {
+    config.maxOutputTokens = Math.max(maxOutputTokens, 900);
+    config.thinkingConfig = { thinkingBudget: 128 };
+  } else {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  return config;
 }
 
 function cleanResponse(text: string): string {
@@ -92,6 +129,51 @@ function sanitizeStringList(value: unknown, fallback: string): string[] {
     .filter((item) => item.length > 0)
     .slice(0, 4);
   return items.length > 0 ? items : [fallback];
+}
+
+function parseVerificationResponse(
+  text: string,
+): { confirmed: boolean; confidence: number; comment: string } | null {
+  const cleaned = extractJsonObject(text);
+
+  try {
+    const parsed = JSON.parse(cleaned) as { confirmed?: unknown; confidence?: unknown; comment?: unknown };
+    return {
+      confirmed: Boolean(parsed.confirmed),
+      confidence: clampConfidence(parsed.confidence),
+      comment: String(parsed.comment || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildFallbackRevisedAnalysis(
+  payload: MatchOddsPayload,
+  original: MatchAiAnalysis,
+  rejectionComment: string,
+): MatchAiAnalysis {
+  const shortReason = rejectionComment.trim() || "Nhan dinh truoc do khong vuot qua buoc tham dinh.";
+  const trimmedReason = shortReason.length > 160 ? `${shortReason.slice(0, 157)}...` : shortReason;
+
+  return {
+    match: `${payload.home} vs ${payload.away}`,
+    preferredScoreline: original.preferredScoreline || "1-1",
+    scoreConfidence: Math.min(original.scoreConfidence || 0, 45),
+    recommendation: "Khong co edge ro rang, nen dung ngoai va theo doi them.",
+    confidence: Math.min(original.confidence || 0, 45),
+    keyPoints: [
+      "Buoc tham dinh doc lap da bac bo nhan dinh ban dau.",
+      "Odds hien tai chua cho thay mot edge ro rang de vao keo.",
+      "Uu tien ky luat va cho them du lieu truoc khi hanh dong.",
+    ],
+    risks: [
+      trimmedReason,
+      "Nhan dinh thay the duoc ha muc tin cay de tranh overclaim.",
+      "Thi truong hien tai co the dang can bang hoac xung dot giua cac market.",
+    ],
+    summary: `Nhan dinh goc bi tu choi trong buoc tham dinh doc lap. Ban thay the nay chuyen sang goc nhin bao thu vi odds chua cho edge ro rang.`,
+  };
 }
 
 export function parseMatchAnalysisResponse(text: string, payload: MatchOddsPayload): MatchAiAnalysis | null {
@@ -137,13 +219,7 @@ export async function analyzeMatchOdds(payload: MatchOddsPayload): Promise<Match
           ],
         },
       ],
-      config: {
-        temperature: 0.2,
-        topP: 0.9,
-        maxOutputTokens: 600,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+      config: buildGenerationConfig(model, 600),
     });
 
   const response = await withRetry(request, {
@@ -180,9 +256,9 @@ export async function verifyMatchAnalysis(
     summary: analysis.summary,
   };
 
-  const request = () =>
+  const buildRequest = (model: string) => () =>
     ai.models.generateContent({
-      model: VERIFY_MODEL,
+      model,
       contents: [
         {
           role: "user",
@@ -196,30 +272,84 @@ export async function verifyMatchAnalysis(
           ],
         },
       ],
-      config: {
-        temperature: 0.2,
-        topP: 0.9,
-        maxOutputTokens: 500,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
+      config: buildGenerationConfig(model, 500),
+    });
+
+  const callVerifyModel = async (model: string): Promise<{ confirmed: boolean; confidence: number; comment: string }> => {
+    const response = await withRetry(buildRequest(model), {
+      onRetry: (error, attempt, maxAttempts, delayMs) => {
+        console.warn(
+          `  ! Gemini match verify temporary error with ${model} for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+            error instanceof Error ? error.message : error
+          }`,
+        );
       },
+    });
+
+    const parsed = parseVerificationResponse(response.text ?? "");
+    if (!parsed) {
+      throw new Error(`Gemini verify parse failed for model ${model}. Raw: ${(response.text ?? "").slice(0, 300)}`);
+    }
+
+    return parsed;
+  };
+
+  try {
+    return await callVerifyModel(VERIFY_MODEL_PRIMARY);
+  } catch (primaryError) {
+    console.warn(
+      `  ! Gemini match verify failed with ${VERIFY_MODEL_PRIMARY} for ${payload.home} vs ${payload.away}, falling back to ${VERIFY_MODEL_FALLBACK}: ${
+        primaryError instanceof Error ? primaryError.message : primaryError
+      }`,
+    );
+    return await callVerifyModel(VERIFY_MODEL_FALLBACK);
+  }
+}
+
+export async function reviseMatchAnalysis(
+  payload: MatchOddsPayload,
+  original: MatchAiAnalysis,
+  rejectionComment: string,
+): Promise<MatchAiAnalysis> {
+  const ai = getClient();
+  const oddsText = formatOddsAnalysisInput(payload);
+
+  const request = () =>
+    ai.models.generateContent({
+      model: VERIFY_MODEL_FALLBACK,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text:
+                `${REVISE_PROMPT}\n\n` +
+                `Odds snapshot:\n${oddsText}\n\n` +
+                `Nhan dinh ban dau (da bi tu choi):\n${JSON.stringify(original, null, 2)}\n\n` +
+                `Ly do tu choi:\n${rejectionComment}`,
+            },
+          ],
+        },
+      ],
+      config: buildGenerationConfig(VERIFY_MODEL_FALLBACK, 600),
     });
 
   const response = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
       console.warn(
-        `  ! Gemini match verify temporary error for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
+        `  ! Gemini match revise temporary error for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
       );
     },
   });
 
-  const cleaned = extractJsonObject(response.text ?? "");
-  const parsed = JSON.parse(cleaned) as { confirmed?: unknown; confidence?: unknown; comment?: unknown };
-  return {
-    confirmed: Boolean(parsed.confirmed),
-    confidence: clampConfidence(parsed.confidence),
-    comment: String(parsed.comment || ""),
-  };
+  const parsed = parseMatchAnalysisResponse(response.text ?? "", payload);
+  if (!parsed) {
+    console.warn(
+      `  ! Gemini revise parse failed for ${payload.home} vs ${payload.away}, falling back to conservative revision. Raw: ${(response.text ?? "").slice(0, 300)}`,
+    );
+    return buildFallbackRevisedAnalysis(payload, original, rejectionComment);
+  }
+  return parsed;
 }

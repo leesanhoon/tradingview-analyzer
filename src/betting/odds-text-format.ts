@@ -195,6 +195,20 @@ export function formatMatchAnalysisMessage(payload: MatchOddsPayload, analysis: 
     analysis.confidence >= 70 ? "cao" : analysis.confidence >= 40 ? "trung binh" : "thap";
   const scoreConfidenceLabel =
     analysis.scoreConfidence >= 70 ? "cao" : analysis.scoreConfidence >= 40 ? "trung binh" : "thap";
+  const verificationLine =
+    analysis.verifiedConfirmed !== undefined
+      ? analysis.verifiedConfirmed
+        ? `✅ Da xac nhan boi Gemini verify (${analysis.verifiedConfidence ?? 0}%)${
+            analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""
+          }`
+        : analysis.revisedAfterReject
+          ? `⚠️ Nhan dinh nay da duoc dieu chinh sau khi verify tu choi (${analysis.verifiedConfidence ?? 0}%)${
+              analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""
+            }`
+          : `⚠️ Gemini verify khong xac nhan ket qua nay (${analysis.verifiedConfidence ?? 0}%)${
+              analysis.verifiedComment ? ` — ${analysis.verifiedComment}` : ""
+            }`
+      : "";
 
   const lines = [
     `*${payload.home} vs ${payload.away}*`,
@@ -202,11 +216,7 @@ export function formatMatchAnalysisMessage(payload: MatchOddsPayload, analysis: 
     `Tin cay ti so: *${analysis.scoreConfidence}%* (${scoreConfidenceLabel})`,
     `Khuyen nghi: *${analysis.recommendation}*`,
     `Do ro tin hieu: *${analysis.confidence}%* (${confidenceLabel})`,
-    analysis.verifiedConfirmed !== undefined
-      ? analysis.verifiedConfirmed
-        ? `✅ Da xac nhan boi Gemini 3.5 Flash (${analysis.verifiedConfidence ?? 0}%) — ${analysis.verifiedComment ?? ""}`
-        : `⚠️ Gemini 3.5 Flash khong xac nhan ket qua nay (${analysis.verifiedConfidence ?? 0}%) — ${analysis.verifiedComment ?? ""}`
-      : "",
+    verificationLine,
     mainOdds ? `Keo chinh: ${mainOdds}` : "",
     "",
     `Tom tat: ${analysis.summary}`,

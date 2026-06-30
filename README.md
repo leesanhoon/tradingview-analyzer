@@ -79,7 +79,7 @@ Function nằm tại [`supabase/functions/telegram-webhook/index.ts`](supabase/f
 Sau khi deploy webhook, luồng dùng Telegram là:
 
 - Gửi bất kỳ tin nhắn nào để bot trả về menu chính
-- Bấm `📊 Phân tích chart`, `⚽ Quét kèo bóng đá`, `🎰 Quét kết quả xổ số`, hoặc `🔮 Dự đoán xổ số` để trigger ngay
+- Bấm `📊 Phân tích chart` để trigger ngay
 - Bấm submenu `✅ Xác minh kết quả ▸` để chọn miền và trigger `lottery-verify.yml`
 
 Webhook chỉ chấp nhận message từ `TELEGRAM_CHAT_ID` đã cấu hình và kiểm tra thêm header `X-Telegram-Bot-Api-Secret-Token`.

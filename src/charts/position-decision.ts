@@ -13,6 +13,27 @@ function getClient(): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
+function buildGenerationConfig(model: string, maxOutputTokens: number) {
+  const config: {
+    temperature: number;
+    topP: number;
+    maxOutputTokens: number;
+    responseMimeType: "application/json";
+    thinkingConfig?: { thinkingBudget: number };
+  } = {
+    temperature: 0.2,
+    topP: 0.9,
+    maxOutputTokens,
+    responseMimeType: "application/json",
+  };
+
+  if (model !== "gemini-2.5-pro") {
+    config.thinkingConfig = { thinkingBudget: 0 };
+  }
+
+  return config;
+}
+
 function cleanResponse(text: string): string {
   return text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
 }
@@ -106,6 +127,7 @@ async function decidePositionWithGemini(
   screenshot: ScreenshotResult,
 ): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
   const ai = getClient();
+  const model = "gemini-2.5-pro";
 
   const prompt = `Review the current chart and the open trade below.
 
@@ -125,7 +147,7 @@ Comment should be short and practical.`;
 
   const request = () =>
     ai.models.generateContent({
-      model: "gemini-2.5-pro",
+      model,
       contents: [
         {
           role: "user",
@@ -140,13 +162,7 @@ Comment should be short and practical.`;
           ],
         },
       ],
-      config: {
-        temperature: 0.2,
-        topP: 0.9,
-        maxOutputTokens: 300,
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-      },
+      config: buildGenerationConfig(model, 300),
     });
 
   const response = await withRetry(request, {

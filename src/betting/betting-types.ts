@@ -18,6 +18,7 @@ export type MatchAiAnalysis = {
   verifiedConfirmed?: boolean;
   verifiedConfidence?: number;
   verifiedComment?: string;
+  revisedAfterReject?: boolean;
 };
 
 export type MatchInfo = {
@@ -25,9 +26,9 @@ export type MatchInfo = {
   home: string;
   away: string;
   kickoffUnix: number;
-  /** Ngày thi đấu theo giờ VN, "YYYY-MM-DD". */
+  /** Ngay thi dau theo gio VN, "YYYY-MM-DD". */
   date: string;
-  /** Giờ thi đấu theo giờ VN, "HH:mm". */
+  /** Gio thi dau theo gio VN, "HH:mm". */
   kickoffTime: string;
 };
 
@@ -50,13 +51,13 @@ export type CompactOdds = {
 
 export type CorrectScoreOutcome = { score: string; price: number };
 
-/** Odds đã rút gọn (bỏ field trùng lặp, mã hóa tên đội) để tiết kiệm token cho AI đọc. */
+/** Odds da rut gon (bo field trung lap, ma hoa ten doi) de tiet kiem token cho AI doc. */
 export type MatchOddsPayload = {
   gameId: string;
   home: string;
   away: string;
   kickoffUnix: number;
   odds: CompactOdds;
-  /** Market "Exact Score" (Correct Score) từ API-Football. */
+  /** Market "Exact Score" (Correct Score) tu API-Football. */
   correctScore?: CorrectScoreOutcome[];
 };
