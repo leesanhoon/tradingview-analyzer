@@ -1,5 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2.108.2";
 import { logger } from "../../../src/shared/logger.ts";
+import { buildStatsReport } from "../../../src/shared/stats-report.ts";
+import { buildStatsMessage } from "../../../src/shared/stats.ts";
+import { vnDateStr } from "../../../src/shared/vn-time.ts";
 import {
   buildTelegramWebhookIdempotencyDescriptor,
   shouldProcessTelegramWebhookUpdate,
@@ -106,12 +109,43 @@ async function sendTelegramMessage(
   chatId: number | string,
   text: string,
   replyMarkup?: InlineKeyboardMarkup,
+  parseMode?: "Markdown",
 ): Promise<void> {
-  await sendTelegramRequest(botToken, "sendMessage", {
+  const payload: Record<string, unknown> = {
     chat_id: chatId,
     text,
     ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    ...(parseMode ? { parse_mode: parseMode } : {}),
+  };
+
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
+
+  if (!response.ok) {
+    const body = await response.text();
+    if (parseMode && body.includes("can't parse entities")) {
+      await sendTelegramMessage(botToken, chatId, text, replyMarkup);
+      return;
+    }
+    throw new Error(`Telegram sendMessage failed: ${body}`);
+  }
+}
+
+function normalizeTelegramCommandToken(token: string | undefined): string | null {
+  if (!token) {
+    return null;
+  }
+
+  const trimmed = token.trim();
+  if (!trimmed.startsWith("/")) {
+    return null;
+  }
+
+  const [command] = trimmed.split("@");
+  return command;
 }
 
 async function editTelegramMessage(
@@ -350,6 +384,84 @@ async function runWorkflowFromCallback(
   }
 }
 
+async function handleStatsCommand(botToken: string, chatId: number): Promise<Response> {
+  const client = getSupabaseClient();
+  if (!client) {
+    throw new Error("Missing Supabase configuration for /stats");
+  }
+
+  const now = new Date();
+  const performanceSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const today = vnDateStr(now.getTime());
+
+  const [{ count: openPositionsCount, error: openPositionsError }, closedPositionsResult, aiUsageResult] = await Promise.all([
+    client.from("open_positions").select("id", { count: "exact", head: true }).eq("status", "open"),
+    client
+      .from("open_positions")
+      .select(
+        "id, pair, direction, entry, stop_loss, take_profit_1, take_profit_2, status, closed_at, tp1_closed_percent, trailing_stop_loss, risk_reward_ratio, tp1_risk_reward_ratio, tp2_risk_reward_ratio, last_management_action, close_reason, realized_risk_reward_ratio, realized_exit_price",
+      )
+      .eq("status", "closed")
+      .gte("closed_at", performanceSince)
+      .order("closed_at", { ascending: true }),
+    client
+      .from("ai_usage")
+      .select("recorded_at, usage_date, provider, model, source, input_tokens, output_tokens, estimated_cost_usd, metadata")
+      .eq("usage_date", today)
+      .order("recorded_at", { ascending: true }),
+  ]);
+
+  if (openPositionsError) {
+    throw new Error(`Failed to load open positions: ${openPositionsError.message}`);
+  }
+  if (closedPositionsResult.error) {
+    throw new Error(`Failed to load closed positions: ${closedPositionsResult.error.message}`);
+  }
+  if (aiUsageResult.error) {
+    throw new Error(`Failed to load AI usage: ${aiUsageResult.error.message}`);
+  }
+
+  const report = buildStatsReport({
+    openPositions: openPositionsCount ?? 0,
+    closedPositions: (closedPositionsResult.data ?? []).map((row: any) => ({
+      id: row.id,
+      pair: row.pair,
+      direction: row.direction,
+      entry: row.entry,
+      stopLoss: row.stop_loss,
+      takeProfit1: row.take_profit_1,
+      takeProfit2: row.take_profit_2,
+      status: row.status,
+      closedAt: row.closed_at,
+      tp1ClosedPercent: row.tp1_closed_percent,
+      trailingStopLoss: row.trailing_stop_loss,
+      riskRewardRatio: row.risk_reward_ratio,
+      tp1RiskRewardRatio: row.tp1_risk_reward_ratio,
+      tp2RiskRewardRatio: row.tp2_risk_reward_ratio,
+      lastManagementAction: row.last_management_action,
+      closeReason: row.close_reason,
+      realizedRiskRewardRatio: row.realized_risk_reward_ratio,
+      realizedExitPrice: row.realized_exit_price,
+    })),
+    aiUsageRecords: (aiUsageResult.data ?? []).map((row: any) => ({
+      recordedAt: row.recorded_at,
+      usageDate: row.usage_date,
+      provider: row.provider,
+      model: row.model,
+      source: row.source,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      estimatedCostUsd: Number(row.estimated_cost_usd ?? 0),
+      metadata: row.metadata ?? {},
+    })),
+    now,
+    performanceWindowDays: 7,
+  });
+
+  await sendTelegramMessage(botToken, chatId, buildStatsMessage(report), undefined, "Markdown");
+  return Response.json({ ok: true, command: "stats" });
+}
+
 async function handleTelegramCallback(
   botToken: string,
   callbackQuery: TelegramCallbackQuery,
@@ -435,6 +547,11 @@ Deno.serve(async (request) => {
           "Skipping duplicate Telegram webhook update",
         );
         return Response.json({ ok: true, ignored: "duplicate-message-update" });
+      }
+
+      const command = normalizeTelegramCommandToken(message.text?.trim().split(/\s+/)[0]);
+      if (command === "/stats") {
+        return handleStatsCommand(botToken, message.chat.id);
       }
 
       await showMenu(botToken, message.chat.id);

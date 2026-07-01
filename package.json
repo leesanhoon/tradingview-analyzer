@@ -14,7 +14,7 @@
         "performance-report": "tsx src/charts/performance-report-runner.ts",
         "test-analyze": "tsx src/charts/test-analyze.ts",
         "test-model-compare": "tsx src/charts/test-model-compare.ts",
-        "setup:telegram-menu": "tsx src/scripts/setup-telegram-menu.ts",
+        "setup:telegram-menu": "tsx src/scripts/setup-telegram-menu-v2.ts",
         "match-odds": "tsx src/betting/betting-index.ts",
         "fetch-matches-list": "tsx src/betting/fetch-matches-list-index.ts",
         "lottery": "tsx src/lottery/lottery-index.ts",
