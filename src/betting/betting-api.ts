@@ -71,6 +71,17 @@ export async function fetchFixtures(dateStr: string = todayDateString()): Promis
 
 export type FixtureOdds = { bookmakerName: string; bets: ApiFootballBet[]; updateIso?: string };
 
+export type FixtureResult = {
+  fixtureId: string;
+  home: string;
+  away: string;
+  kickoffUnix: number;
+  date: string;
+  statusShort: string;
+  goalsHome: number | null;
+  goalsAway: number | null;
+};
+
 /**
  * Toàn bộ market (kể cả "Exact Score") cho 1 fixture, từ bookmaker đã cấu hình
  * (ưu tiên API_FOOTBALL_BOOKMAKER, mặc định "1xBet"); fallback bookmaker đầu
@@ -86,4 +97,34 @@ export async function fetchFixtureOdds(fixtureId: string): Promise<FixtureOdds |
   const preferred = allBookmakers.find((b) => b.name?.toLowerCase() === bookmaker.toLowerCase());
   const chosen = preferred ?? allBookmakers[0];
   return { bookmakerName: chosen.name, bets: chosen.bets, updateIso: entry?.update };
+}
+
+/**
+ * Chi tiết fixture theo id, dùng cho backtest betting để lấy tỷ số thực tế sau trận.
+ */
+export async function fetchFixtureResult(fixtureId: string): Promise<FixtureResult | null> {
+  const json = await fetchJson(`/fixtures?id=${fixtureId}`);
+  const entry = json.response?.[0] as
+    | {
+        fixture?: { id?: number; date?: string; status?: { short?: string } };
+        teams?: { home?: { name?: string | null }; away?: { name?: string | null } };
+        goals?: { home?: number | null; away?: number | null };
+      }
+    | undefined;
+
+  if (!entry?.fixture?.id || !entry.fixture.date || !entry.teams?.home?.name || !entry.teams?.away?.name) {
+    return null;
+  }
+
+  const kickoffUnix = Math.floor(new Date(entry.fixture.date).getTime() / 1000);
+  return {
+    fixtureId: String(entry.fixture.id),
+    home: entry.teams.home.name,
+    away: entry.teams.away.name,
+    kickoffUnix,
+    date: entry.fixture.date.slice(0, 10),
+    statusShort: String(entry.fixture.status?.short ?? ""),
+    goalsHome: entry.goals?.home ?? null,
+    goalsAway: entry.goals?.away ?? null,
+  };
 }

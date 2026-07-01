@@ -2,6 +2,7 @@ import { sendMessage } from "../shared/telegram.js";
 import { getConfiguredBookmaker } from "./betting-api.js";
 import { buildOddsPayload, pickNearestUpcomingDateMatches } from "./betting.js";
 import { analyzeMatchOdds, reviseMatchAnalysis, verifyMatchAnalysis } from "./betting-gemini.js";
+import { saveBettingAnalysisSnapshot } from "./betting-analysis-repository.js";
 import { loadUpcomingMatches } from "./match-repository.js";
 import {
   formatMainOddsSummary,
@@ -10,6 +11,7 @@ import {
   formatOddsFallbackMessage,
 } from "./odds-text-format.js";
 import { createLogger } from "../shared/logger.js";
+import { vnDateStr } from "../shared/vn-time.js";
 
 const logger = createLogger("betting:odds-runner");
 function formatKickoff(unixSeconds: number): string {
@@ -103,6 +105,20 @@ export async function runOddsCheck(): Promise<void> {
         logger.info(`  ↻ Revised ${match.home} vs ${match.away} thanh nhan dinh moi`);
       }
 
+      await saveBettingAnalysisSnapshot({
+        gameId: match.gameId,
+        date: vnDateStr(match.kickoffUnix * 1000),
+        home: match.home,
+        away: match.away,
+        kickoffUnix: match.kickoffUnix,
+        odds: match.odds,
+        correctScore: match.correctScore ?? null,
+        analysis,
+        verifiedConfirmed: analysis.verifiedConfirmed ?? null,
+        verifiedConfidence: analysis.verifiedConfidence ?? null,
+        verifiedComment: analysis.verifiedComment ?? null,
+        revisedAfterReject: analysis.revisedAfterReject ?? false,
+      });
       await sendMessage(formatMatchAnalysisMessage(match, analysis));
       await sendMessage(formatOddsDataMessage(match));
       logger.info(`  ✓ Gemini analyzed: ${match.home} vs ${match.away}`);
