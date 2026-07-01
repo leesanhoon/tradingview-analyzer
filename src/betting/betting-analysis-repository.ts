@@ -18,8 +18,12 @@ export type BettingAnalysisSnapshot = {
   createdAt?: string;
 };
 
-export async function saveBettingAnalysisSnapshot(snapshot: BettingAnalysisSnapshot): Promise<void> {
-  const { error } = await (getDb().from("betting_analysis_snapshots") as any).upsert(
+export async function saveBettingAnalysisSnapshot(
+  snapshot: BettingAnalysisSnapshot,
+): Promise<void> {
+  const { error } = await (
+    getDb().from("betting_analysis_snapshots") as any
+  ).upsert(
     {
       game_id: snapshot.gameId,
       date: snapshot.date,
@@ -37,10 +41,13 @@ export async function saveBettingAnalysisSnapshot(snapshot: BettingAnalysisSnaps
     { onConflict: "game_id" },
   );
 
-  if (error) throw new Error(`saveBettingAnalysisSnapshot failed: ${error.message}`);
+  if (error)
+    throw new Error(`saveBettingAnalysisSnapshot failed: ${error.message}`);
 }
 
-export async function loadBettingAnalysisSnapshots(sinceDate?: string): Promise<BettingAnalysisSnapshot[]> {
+export async function loadBettingAnalysisSnapshots(
+  sinceDate?: string,
+): Promise<BettingAnalysisSnapshot[]> {
   let query = (getDb().from("betting_analysis_snapshots") as any)
     .select(
       "id, game_id, date, home, away, kickoff_unix, odds, correct_score, analysis, verified_confirmed, verified_confidence, verified_comment, revised_after_reject, created_at",
@@ -52,24 +59,27 @@ export async function loadBettingAnalysisSnapshots(sinceDate?: string): Promise<
   }
 
   const { data, error } = await query;
-  if (error) throw new Error(`loadBettingAnalysisSnapshots failed: ${error.message}`);
+  if (error)
+    throw new Error(`loadBettingAnalysisSnapshots failed: ${error.message}`);
 
-  return ((data ?? []) as Array<{
-    id: number;
-    game_id: string;
-    date: string;
-    home: string;
-    away: string;
-    kickoff_unix: number;
-    odds: MatchOddsPayload["odds"];
-    correct_score: MatchOddsPayload["correctScore"] | null;
-    analysis: MatchAiAnalysis;
-    verified_confirmed: boolean | null;
-    verified_confidence: number | null;
-    verified_comment: string | null;
-    revised_after_reject: boolean;
-    created_at: string;
-  }>).map((row) => ({
+  return (
+    (data ?? []) as Array<{
+      id: number;
+      game_id: string;
+      date: string;
+      home: string;
+      away: string;
+      kickoff_unix: number;
+      odds: MatchOddsPayload["odds"];
+      correct_score: MatchOddsPayload["correctScore"] | null;
+      analysis: MatchAiAnalysis;
+      verified_confirmed: boolean | null;
+      verified_confidence: number | null;
+      verified_comment: string | null;
+      revised_after_reject: boolean;
+      created_at: string;
+    }>
+  ).map((row) => ({
     id: row.id,
     gameId: row.game_id,
     date: row.date,

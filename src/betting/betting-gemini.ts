@@ -7,7 +7,7 @@ import { createLogger } from "../shared/logger.js";
 import { recordGeminiUsage } from "../shared/ai-usage.js";
 
 const logger = createLogger("betting:betting-gemini");
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.5-flash";
 const VERIFY_MODEL_PRIMARY = process.env.BETTING_VERIFY_MODEL_PRIMARY?.trim() || "gemini-2.5-pro";
 const VERIFY_MODEL_FALLBACK = process.env.BETTING_VERIFY_MODEL_FALLBACK?.trim() || "gemini-3.5-flash";
 const GEMINI_RATE_LIMIT = {
