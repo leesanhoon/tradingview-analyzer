@@ -13,7 +13,7 @@ Nguồn: [docs/plan-for-app.md](../plan-for-app.md). Mỗi phase dưới đây l
 | 07 | [Backtesting](07-backtesting.md) | Trung bình | done |
 | 08 | [Cost & observability](08-cost-observability.md) | Trung bình | done |
 | 09 | [Lệnh /stats](09-stats-command.md) | Trung bình | in-progress |
-| 10 | [Mở rộng tính năng](10-feature-expansion.md) | Thấp | todo |
+| 10 | [Mở rộng tính năng](10-feature-expansion.md) | Thấp | done |
 
 ## Cách dùng
 - Cập nhật cột "Trạng thái" (todo / in-progress / done) khi bắt đầu/hoàn thành mỗi phase.
