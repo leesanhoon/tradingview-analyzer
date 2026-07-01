@@ -5,6 +5,7 @@ import { saveOpenPosition } from "./positions-repository.js";
 import { runCheckOpenTrades } from "./check-open-trades-runner.js";
 import { sendAllAnalyses, notifyError } from "../shared/telegram.js";
 import { createLogger } from "../shared/logger.js";
+import { validateTradeSetupForOpen } from "./position-engine.js";
 
 const logger = createLogger("charts:index");
 
@@ -40,6 +41,15 @@ async function main(): Promise<void> {
   for (const setup of result.setups) {
     if (setup.verifiedConfirmed === true) {
       try {
+        const validation = validateTradeSetupForOpen(setup);
+        if (!validation.accepted) {
+          logger.info("Skipped open position due to risk/reward gate", {
+            pair: setup.pair,
+            reason: validation.reason,
+          });
+          continue;
+        }
+
         const saved = await saveOpenPosition(setup);
         if (saved) {
           setup.autoTracked = true;

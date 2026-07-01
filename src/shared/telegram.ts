@@ -242,25 +242,53 @@ export function buildPositionDecisionMessage(
     lastDecision?: string | null;
     lastDecisionConfidence?: number | null;
     lastDecisionComment?: string | null;
+    tradeStage?: string | null;
+    tp1ClosedPercent?: number | null;
+    trailingStopLoss?: string | null;
   },
-  decision: { decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string },
+  decision: {
+    decision: "HOLD" | "CLOSE" | "STOP";
+    confidence: number;
+    comment: string;
+    managementAction?: "NONE" | "PARTIAL_TP1" | "MOVE_SL_TO_BE" | "TRAIL_SL" | "TP2_CLOSE";
+    partialClosePercent?: number;
+    newStopLoss?: string | null;
+    tp1Reached?: boolean;
+    tp2Reached?: boolean;
+  },
 ): string {
   const emoji = decision.decision === "HOLD" ? "🟢" : decision.decision === "CLOSE" ? "🟡" : "🔴";
   const actionLine =
     decision.decision === "HOLD"
       ? "🟢 Tiếp tục giữ lệnh."
       : "🔴 Bot đã tự động đóng vị thế trong hệ thống theo dõi.";
+  const managementLine =
+    decision.managementAction === "PARTIAL_TP1"
+      ? `🟡 Partial TP1: đóng ${decision.partialClosePercent ?? 50}% và dời SL${decision.newStopLoss ? ` về ${decision.newStopLoss}` : " về breakeven"}.`
+      : decision.managementAction === "MOVE_SL_TO_BE"
+        ? `🟡 SL đã được dời về breakeven${decision.newStopLoss ? ` (${decision.newStopLoss})` : ""}.`
+        : decision.managementAction === "TRAIL_SL"
+          ? `🟡 SL trailing đã được cập nhật${decision.newStopLoss ? `: ${decision.newStopLoss}` : ""}.`
+          : decision.managementAction === "TP2_CLOSE"
+            ? "🟢 TP2 đã đạt, đóng toàn bộ vị thế."
+            : "";
   const lines = [
     `${emoji} *Vị thế #${position.id}* — ${position.pair} ${position.direction}`,
     position.setup ? `📋 *${position.setup}*` : "",
     "",
     `*Quyết định:* ${decision.decision} (${decision.confidence}%)`,
     actionLine,
+    managementLine,
     position.openedAt ? `*Đã mở:* ${position.openedAt}` : "",
     `Entry: ${position.entry}`,
     `SL: ${position.stopLoss}`,
     `TP1: ${position.takeProfit1}`,
     position.takeProfit2 ? `TP2: ${position.takeProfit2}` : "",
+    position.tradeStage ? `*Trạng thái:* ${position.tradeStage}` : "",
+    position.tp1ClosedPercent !== undefined && position.tp1ClosedPercent !== null
+      ? `*TP1 đã đóng:* ${position.tp1ClosedPercent}%`
+      : "",
+    position.trailingStopLoss ? `*Trailing SL:* ${position.trailingStopLoss}` : "",
     "",
     `*Nhận định:* ${decision.comment || "Không có nhận xét chi tiết."}`,
   ].filter(Boolean);

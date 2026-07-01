@@ -1,5 +1,5 @@
 import { captureVerificationChartScreenshot, findChartForPair } from "./screenshot.js";
-import { closePosition, loadOpenPositions, updatePositionDecision } from "./positions-repository.js";
+import { buildPositionManagementPatch, closePosition, loadOpenPositions, updatePositionDecision } from "./positions-repository.js";
 import { decidePosition } from "./position-decision.js";
 import { buildPositionDecisionMessage, sendMessage, sendPhoto } from "../shared/telegram.js";
 import { createLogger } from "../shared/logger.js";
@@ -21,8 +21,9 @@ async function processPosition(position: Awaited<ReturnType<typeof loadOpenPosit
   await sendPhoto(screenshot.buffer, `📊 ${position.pair} - kiểm tra vị thế`);
 
   const decision = await decidePosition(position, screenshot);
-  await updatePositionDecision(position.id, decision.decision, decision.confidence, decision.comment);
-  if (decision.decision === "CLOSE" || decision.decision === "STOP") {
+  const { patch, closePosition: shouldClose } = buildPositionManagementPatch(position, decision);
+  await updatePositionDecision(position.id, decision, patch);
+  if (shouldClose) {
     await closePosition(position.id);
   }
 
@@ -41,6 +42,9 @@ async function processPosition(position: Awaited<ReturnType<typeof loadOpenPosit
       lastDecision: position.lastDecision,
       lastDecisionConfidence: position.lastDecisionConfidence,
       lastDecisionComment: position.lastDecisionComment,
+      tradeStage: patch?.tradeStage ?? position.tradeStage,
+      tp1ClosedPercent: patch?.tp1ClosedPercent ?? position.tp1ClosedPercent,
+      trailingStopLoss: patch?.trailingStopLoss ?? position.trailingStopLoss,
     },
     decision,
   );

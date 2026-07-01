@@ -9,17 +9,17 @@
 - [src/charts/check-open-trades-runner.ts](../../src/charts/check-open-trades-runner.ts): runner định kỳ kiểm tra vị thế đang mở, có thể là nơi cần gọi logic trailing stop.
 
 ## Việc cần làm
-- [ ] Thiết kế schema cho partial TP: TP1/TP2 với % đóng lệnh tương ứng (vd đóng 50% tại TP1, phần còn lại chạy tới TP2).
-- [ ] Thêm field cần thiết vào bảng `open_positions` (migration mới) để lưu trạng thái partial TP đã đóng bao nhiêu %.
-- [ ] Implement logic trailing stop / dynamic SL: sau khi giá đạt TP1, dời SL về breakeven hoặc theo trailing distance cấu hình.
-- [ ] Implement enforce risk-reward ratio tối thiểu (vd R:R >= 1:1.5) — nếu AI đề xuất lệnh không đạt ngưỡng, từ chối mở lệnh hoặc yêu cầu phân tích lại.
-- [ ] Cập nhật `check-open-trades-runner.ts` để gọi logic trailing stop khi kiểm tra định kỳ.
-- [ ] Cập nhật thông báo Telegram khi có partial close / trailing SL update, để người dùng theo dõi được.
+- [x] Thiết kế schema cho partial TP: TP1/TP2 với % đóng lệnh tương ứng (vd đóng 50% tại TP1, phần còn lại chạy tới TP2).
+- [x] Thêm field cần thiết vào bảng `open_positions` (migration mới) để lưu trạng thái partial TP đã đóng bao nhiêu %.
+- [x] Implement logic trailing stop / dynamic SL: sau khi giá đạt TP1, dời SL về breakeven hoặc theo trailing distance cấu hình.
+- [x] Implement enforce risk-reward ratio tối thiểu (vd R:R >= 1:1.5) — nếu AI đề xuất lệnh không đạt ngưỡng, từ chối mở lệnh hoặc yêu cầu phân tích lại.
+- [x] Cập nhật `check-open-trades-runner.ts` để gọi logic trailing stop khi kiểm tra định kỳ.
+- [x] Cập nhật thông báo Telegram khi có partial close / trailing SL update, để người dùng theo dõi được.
 
 ## Acceptance criteria
-- [ ] Unit test (xem [Phase 01](01-testing.md)) cho các nhánh: đạt TP1 → đóng % và dời SL; đạt TP2 → đóng toàn bộ; R:R dưới ngưỡng → từ chối mở lệnh.
-- [ ] Lệnh thực tế (giả lập) có ghi nhận đúng trạng thái partial TP trong `open_positions`.
-- [ ] Telegram nhận được thông báo rõ ràng khi có sự kiện partial TP/trailing SL.
+- [x] Unit test (xem [Phase 01](01-testing.md)) cho các nhánh: đạt TP1 → đóng % và dời SL; đạt TP2 → đóng toàn bộ; R:R dưới ngưỡng → từ chối mở lệnh.
+- [x] Lệnh thực tế (giả lập) có ghi nhận đúng trạng thái partial TP trong `open_positions`.
+- [x] Telegram nhận được thông báo rõ ràng khi có sự kiện partial TP/trailing SL.
 
 ## Ghi chú / rủi ro
 - Cần đồng bộ với Phase 06 (performance tracking) vì thay đổi cấu trúc lệnh ảnh hưởng tới cách tính win-rate/R:R thực tế.

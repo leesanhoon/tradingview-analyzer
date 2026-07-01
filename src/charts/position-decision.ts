@@ -6,6 +6,7 @@ import type { OpenPosition } from "./positions-repository.js";
 import { getVerifyProvider } from "./verify-provider.js";
 import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
+import type { PositionDecisionOutcome } from "./position-engine.js";
 
 const logger = createLogger("charts:position-decision");
 const GEMINI_RATE_LIMIT = {
@@ -62,17 +63,47 @@ export function clampConfidence(value: unknown): number {
   return Math.max(0, Math.min(100, Math.round(num)));
 }
 
-export function parseDecisionResponse(
-  text: string,
-): { decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string } | null {
+export function parseDecisionResponse(text: string): PositionDecisionOutcome | null {
   const cleaned = extractJsonObject(text);
   try {
-    const parsed = JSON.parse(cleaned) as Partial<{ decision: string; confidence: number; comment: string }>;
-    const decision = parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
+    const parsed = JSON.parse(cleaned) as Partial<PositionDecisionOutcome> & {
+      managementAction?: string;
+      partialClosePercent?: number;
+      newStopLoss?: string;
+      tp1Reached?: boolean;
+      tp2Reached?: boolean;
+    };
+    const decision: PositionDecisionOutcome["decision"] =
+      parsed.decision === "CLOSE" || parsed.decision === "STOP" ? parsed.decision : "HOLD";
+    const tp1Reached = Boolean(parsed.tp1Reached);
+    const tp2Reached = Boolean(parsed.tp2Reached);
+    const managementAction: PositionDecisionOutcome["managementAction"] =
+      parsed.managementAction === "PARTIAL_TP1" ||
+      parsed.managementAction === "MOVE_SL_TO_BE" ||
+      parsed.managementAction === "TRAIL_SL" ||
+      parsed.managementAction === "TP2_CLOSE"
+        ? parsed.managementAction
+        : tp2Reached
+          ? "TP2_CLOSE"
+          : tp1Reached
+            ? "PARTIAL_TP1"
+            : "NONE";
+
     return {
       decision,
       confidence: clampConfidence(parsed.confidence),
       comment: String(parsed.comment || ""),
+      managementAction,
+      partialClosePercent: Math.max(
+        0,
+        Math.min(100, Math.round(Number(parsed.partialClosePercent ?? (managementAction === "PARTIAL_TP1" ? 50 : 0)))),
+      ),
+      newStopLoss: parsed.newStopLoss ? String(parsed.newStopLoss) : null,
+      tp1Reached,
+      tp2Reached,
+      riskReward: parsed.riskReward === undefined ? null : Number(parsed.riskReward),
+      tp1RiskReward: parsed.tp1RiskReward === undefined ? null : Number(parsed.tp1RiskReward),
+      tp2RiskReward: parsed.tp2RiskReward === undefined ? null : Number(parsed.tp2RiskReward),
     };
   } catch {
     return null;
@@ -82,7 +113,7 @@ export function parseDecisionResponse(
 async function decidePositionWithClaude(
   position: OpenPosition,
   screenshot: ScreenshotResult,
-): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
+): Promise<PositionDecisionOutcome> {
   const ai = getClaudeClient();
 
   const prompt = `Review the current chart and the open trade below.
@@ -97,8 +128,11 @@ Trade:
 - Take profit 2: ${position.takeProfit2 ?? ""}
 - Reasons: ${(position.reasons ?? []).slice(0, 4).join(" | ")}
 
-Return only JSON with keys decision, confidence, comment.
+Return only JSON with keys decision, managementAction, partialClosePercent, newStopLoss, confidence, comment.
 decision must be one of HOLD, CLOSE, STOP.
+managementAction must be one of NONE, PARTIAL_TP1, MOVE_SL_TO_BE, TRAIL_SL, TP2_CLOSE.
+If TP1 is reached, use PARTIAL_TP1 and set partialClosePercent to 50 unless a different configured partial close is justified.
+If TP2 is reached, use decision CLOSE and managementAction TP2_CLOSE.
 Comment should be short and practical.`;
 
   const request = () =>
@@ -145,7 +179,7 @@ Comment should be short and practical.`;
 async function decidePositionWithGemini(
   position: OpenPosition,
   screenshot: ScreenshotResult,
-): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
+): Promise<PositionDecisionOutcome> {
   const ai = getClient();
   const model = "gemini-2.5-pro";
 
@@ -161,8 +195,11 @@ Trade:
 - Take profit 2: ${position.takeProfit2 ?? ""}
 - Reasons: ${(position.reasons ?? []).slice(0, 4).join(" | ")}
 
-Return only JSON with keys decision, confidence, comment.
+Return only JSON with keys decision, managementAction, partialClosePercent, newStopLoss, confidence, comment.
 decision must be one of HOLD, CLOSE, STOP.
+managementAction must be one of NONE, PARTIAL_TP1, MOVE_SL_TO_BE, TRAIL_SL, TP2_CLOSE.
+If TP1 is reached, use PARTIAL_TP1 and set partialClosePercent to 50 unless a different configured partial close is justified.
+If TP2 is reached, use decision CLOSE and managementAction TP2_CLOSE.
 Comment should be short and practical.`;
 
   const request = () =>
@@ -207,7 +244,7 @@ Comment should be short and practical.`;
 export async function decidePosition(
   position: OpenPosition,
   screenshot: ScreenshotResult,
-): Promise<{ decision: "HOLD" | "CLOSE" | "STOP"; confidence: number; comment: string }> {
+): Promise<PositionDecisionOutcome> {
   const provider = getVerifyProvider();
   return provider === "claude"
     ? decidePositionWithClaude(position, screenshot)

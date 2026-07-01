@@ -43,7 +43,7 @@ describe("charts/position-decision", () => {
   });
 
   test("parseDecisionResponse normalizes malformed decisions to HOLD", () => {
-    expect(positionDecision.parseDecisionResponse('{"decision":"WAIT","confidence":"abc","comment":"unclear"}')).toEqual({
+    expect(positionDecision.parseDecisionResponse('{"decision":"WAIT","confidence":"abc","comment":"unclear"}')).toMatchObject({
       decision: "HOLD",
       confidence: 0,
       comment: "unclear",
@@ -77,7 +77,7 @@ describe("charts/position-decision", () => {
       { chart: { symbol: "EURUSD", name: "EUR/USD" }, buffer: Buffer.from("chart"), filepath: "/tmp/chart.jpg" },
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       decision: "CLOSE",
       confidence: 87,
       comment: "Trend failed",
@@ -113,7 +113,7 @@ describe("charts/position-decision", () => {
       { chart: { symbol: "GBPUSD", name: "GBP/USD" }, buffer: Buffer.from("chart"), filepath: "/tmp/chart.jpg" },
     );
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       decision: "STOP",
       confidence: 94,
       comment: "Invalidated",
