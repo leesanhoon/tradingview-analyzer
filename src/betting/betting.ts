@@ -3,7 +3,9 @@ import { extractCorrectScore } from "./correct-score-api.js";
 import type { ApiFootballFixture, MatchInfo, MatchOddsPayload } from "./betting-types.js";
 import { compactOdds } from "./odds-compact.js";
 import { vnDateStr, vnTimeStr } from "../shared/vn-time.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("betting:betting");
 export function extractMatches(raw: unknown): MatchInfo[] {
   const fixtures = (raw as { response?: ApiFootballFixture[] } | undefined)?.response ?? [];
   return fixtures
@@ -47,16 +49,17 @@ export async function buildOddsPayload(
       const correctScore = extractCorrectScore(fixtureOdds.bets);
 
       payload.push({ ...match, odds, ...(correctScore.length > 0 ? { correctScore } : {}) });
-      console.log(
+      logger.info(
         `  ✓ Lấy kèo (${odds.markets.length} market${correctScore.length > 0 ? " + Correct Score" : ""}) ` +
           `từ ${fixtureOdds.bookmakerName}: ${match.home} vs ${match.away}`,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`  ⚠ Lỗi lấy kèo cho ${match.home} vs ${match.away}: ${message}`);
+      logger.warn(`  ⚠ Lỗi lấy kèo cho ${match.home} vs ${match.away}: ${message}`);
       failures.push({ match, message });
     }
   }
 
   return { payload, failures };
 }
+

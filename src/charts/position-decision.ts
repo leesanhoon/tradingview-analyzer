@@ -4,7 +4,9 @@ import { getClaudeClient, extractTextFromClaudeResponse } from "../shared/claude
 import { withRetry } from "../shared/retry.js";
 import type { OpenPosition } from "./positions-repository.js";
 import { getVerifyProvider } from "./verify-provider.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("charts:position-decision");
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -119,7 +121,7 @@ Comment should be short and practical.`;
 
   const response = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Claude position decision temporary error for ${position.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -179,7 +181,7 @@ Comment should be short and practical.`;
 
   const response = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Gemini position decision temporary error for ${position.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -205,3 +207,5 @@ export async function decidePosition(
 }
 
 export { decidePositionWithClaude };
+
+

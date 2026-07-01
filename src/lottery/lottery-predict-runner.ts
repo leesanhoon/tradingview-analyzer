@@ -5,7 +5,9 @@ import { savePredictions } from "./lottery-predictions-repository.js";
 import { WEEKDAY_LABELS } from "./lottery-schedule.js";
 import { sendMessage } from "../shared/telegram.js";
 import type { LotteryRegion } from "./lottery-types.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("lottery:lottery-predict-runner");
 const REGIONS: LotteryRegion[] = ["mien-nam", "mien-trung", "mien-bac"];
 const REGION_LABELS: Record<LotteryRegion, string> = {
   "mien-bac": "🟦 Miền Bắc",
@@ -48,7 +50,7 @@ const RANK_MEDAL = ["🥇", "🥈", "🥉"];
 /** Phân tích thống kê + hồi quy tuyến tính, dự đoán top 3 số dễ ra mỗi miền — mỗi miền tự tính đúng ngày/thứ mục tiêu (hôm nay hoặc ngày mai nếu đã quay xong). */
 export async function runLotteryPredict(): Promise<void> {
   const today = vnDateOffset(0);
-  console.log(`🔮 Lottery Predictor — chạy ngày ${today.dateStr} (${WEEKDAY_LABELS[today.weekday]})\n`);
+  logger.info(`🔮 Lottery Predictor — chạy ngày ${today.dateStr} (${WEEKDAY_LABELS[today.weekday]})\n`);
 
   const historyCache = new Map<number, Awaited<ReturnType<typeof loadWeekdayHistory>>>();
   const historyForWeekday = async (weekday: number) => {
@@ -69,7 +71,7 @@ export async function runLotteryPredict(): Promise<void> {
     const history = await historyForWeekday(target.weekday);
     const recordsForRegion = history.filter((r) => r.region === region);
     if (recordsForRegion.length === 0) {
-      console.log(`✗ [${region}] Chưa có dữ liệu lịch sử cho ${weekdayLabel} — bỏ qua.`);
+      logger.info(`✗ [${region}] Chưa có dữ liệu lịch sử cho ${weekdayLabel} — bỏ qua.`);
       continue;
     }
 
@@ -87,17 +89,18 @@ export async function runLotteryPredict(): Promise<void> {
       lines.push(`${RANK_MEDAL[i] ?? "▫️"} \`${p.number}\`  —  ${(p.freq * 100).toFixed(1)}% xác suất  ${overdueIcon(p.overdueRatio)} _(${gapNote})_`);
     });
     lines.push("");
-    console.log(`✓ [${region}] Top ${predictions.length} số dự đoán cho ${weekdayLabel} ${target.dateStr} từ ${periodCount} kỳ.`);
+    logger.info(`✓ [${region}] Top ${predictions.length} số dự đoán cho ${weekdayLabel} ${target.dateStr} từ ${periodCount} kỳ.`);
   }
 
   if (!anyPrediction) {
     await sendMessage("🔮 *DỰ ĐOÁN XỔ SỐ*\n\n❌ Chưa có dữ liệu lịch sử cho miền/ngày nào — bỏ qua.");
-    console.log("✓ Không có dữ liệu để dự đoán.");
+    logger.info("✓ Không có dữ liệu để dự đoán.");
     return;
   }
 
   lines.push("━━━━━━━━━━━━━━━");
   lines.push("⚠️ _Chỉ mang tính tham khảo thống kê, xổ số là ngẫu nhiên._");
   await sendMessage(lines.join("\n"));
-  console.log("\n✅ Hoàn tất.");
+  logger.info("\n✅ Hoàn tất.");
 }
+

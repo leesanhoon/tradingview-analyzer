@@ -1,7 +1,9 @@
 import { fetchDayPage, parseWeekdayPage } from "./lottery-scraper.js";
 import { appendWeekdayHistory, loadWeekdayHistory } from "./lottery-repository.js";
 import type { LotteryRegion } from "./lottery-types.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("lottery:lottery-backfill-runner");
 const REGIONS: LotteryRegion[] = ["mien-bac", "mien-trung", "mien-nam"];
 const FETCH_DELAY_MS = 250;
 
@@ -24,7 +26,7 @@ function vnDateNDaysAgo(n: number): { dateStr: string; weekday: number } {
  * cache (đúng file của thứ tương ứng) để resume được nếu bị ngắt giữa chừng.
  */
 export async function runLotteryBackfill(days: number): Promise<void> {
-  console.log(`🎰 Lottery Backfill — ${days} ngày gần nhất, cả 3 miền\n`);
+  logger.info(`🎰 Lottery Backfill — ${days} ngày gần nhất, cả 3 miền\n`);
 
   const weekdayKeyCache = new Map<number, Set<string>>();
   const existingKeysFor = async (weekday: number): Promise<Set<string>> => {
@@ -60,7 +62,7 @@ export async function runLotteryBackfill(days: number): Promise<void> {
         fetched++;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        console.error(`✗ [${region}] ${dateStr}: ${message}`);
+        logger.error(`✗ [${region}] ${dateStr}: ${message}`);
         failed++;
       }
 
@@ -68,9 +70,10 @@ export async function runLotteryBackfill(days: number): Promise<void> {
     }
 
     if (offset % 30 === 0) {
-      console.log(`… đã xử lý ${offset}/${days} ngày (fetched=${fetched}, skipped=${skipped}, failed=${failed})`);
+      logger.info(`… đã xử lý ${offset}/${days} ngày (fetched=${fetched}, skipped=${skipped}, failed=${failed})`);
     }
   }
 
-  console.log(`\n✅ Backfill hoàn tất — fetched=${fetched}, skipped (đã có sẵn)=${skipped}, failed=${failed}`);
+  logger.info(`\n✅ Backfill hoàn tất — fetched=${fetched}, skipped (đã có sẵn)=${skipped}, failed=${failed}`);
 }
+

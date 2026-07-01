@@ -6,7 +6,9 @@ import { analyzeAllCharts, buildVerificationPrompt, verifySetupWithGeminiModel }
 import { extractTextFromClaudeResponse, getClaudeClient } from "../shared/claude.js";
 import { withRetry } from "../shared/retry.js";
 import type { ChartConfig, ScreenshotResult, TradeSetup } from "../shared/types.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("charts:test-model-compare");
 const TEST_DIR = join(process.cwd(), "test-charts");
 const GEMINI_PRO_MODEL = "gemini-2.5-pro";
 const GEMINI_FLASH_MODEL = "gemini-3.5-flash";
@@ -131,7 +133,7 @@ async function verifyWithClaude(setup: TradeSetup, imageBuffer: Buffer): Promise
 
   const response = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Claude compare temporary error (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -161,19 +163,19 @@ function formatRow(model: string, elapsedMs: number, result: CompareResult): str
 }
 
 async function compareForScreenshot(screenshot: ScreenshotResult): Promise<void> {
-  console.log(`\nFixture: ${screenshot.filepath}`);
+  logger.info(`\nFixture: ${screenshot.filepath}`);
 
   const analysis = await analyzeAllCharts([screenshot]);
   if (analysis.setups.length === 0) {
-    console.log("No setup >=70% found from Gemini 3.5 Flash analysis. Skipping compare.");
+    logger.info("No setup >=70% found from Gemini 3.5 Flash analysis. Skipping compare.");
     if (analysis.noSetupReason) {
-      console.log(`Reason: ${analysis.noSetupReason}`);
+      logger.info(`Reason: ${analysis.noSetupReason}`);
     }
     return;
   }
 
   const setup = analysis.setups[0];
-  console.log(`Candidate setup: ${setup.pair} | ${setup.direction} | ${setup.setup} | ${setup.confidence}%`);
+  logger.info(`Candidate setup: ${setup.pair} | ${setup.direction} | ${setup.setup} | ${setup.confidence}%`);
 
   const rows: CompareRow[] = [
     ["Gemini 2.5 Pro", () => verifyGeminiModel(GEMINI_PRO_MODEL, setup, screenshot.buffer)],
@@ -181,16 +183,16 @@ async function compareForScreenshot(screenshot: ScreenshotResult): Promise<void>
     ["Claude Sonnet 4.6", () => verifyWithClaude(setup, screenshot.buffer)],
   ];
 
-  console.log("\nmodel              | time(ms) | confirmed | confidence | comment");
-  console.log("-------------------|----------|-----------|------------|--------");
+  logger.info("\nmodel              | time(ms) | confirmed | confidence | comment");
+  logger.info("-------------------|----------|-----------|------------|--------");
 
   for (const [label, fn] of rows) {
     const started = Date.now();
     try {
       const result = await fn();
-      console.log(formatRow(label, Date.now() - started, result));
+      logger.info(formatRow(label, Date.now() - started, result));
     } catch (error) {
-      console.log(
+      logger.info(
         formatRow(label, Date.now() - started, {
           error: error instanceof Error ? error.message : String(error),
         }),
@@ -200,7 +202,7 @@ async function compareForScreenshot(screenshot: ScreenshotResult): Promise<void>
 }
 
 async function main(): Promise<void> {
-  console.log("Chart model compare test\n");
+  logger.info("Chart model compare test\n");
   const screenshots = await readFixtures();
 
   for (const screenshot of screenshots) {
@@ -209,6 +211,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("Error:", error);
+  logger.error("Error:", error);
   process.exit(1);
 });
+
+

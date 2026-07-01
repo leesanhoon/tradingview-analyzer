@@ -3,23 +3,25 @@ import { readdir, readFile } from "fs/promises";
 import { join, extname } from "path";
 import type { ScreenshotResult, ChartConfig } from "../shared/types.js";
 import { analyzeAllCharts } from "./analyzer.js";
+import { createLogger } from "../shared/logger.js";
 
 const TEST_DIR = join(process.cwd(), "test-charts");
+const logger = createLogger("charts:test-analyze");
 
 async function main(): Promise<void> {
-  console.log("🧪 Bob Volman Test — Analyzing sample charts...\n");
+  logger.info("Bob Volman test analyzing sample charts");
 
   const files = (await readdir(TEST_DIR))
     .filter((f) => [".png", ".jpg", ".jpeg"].includes(extname(f).toLowerCase()))
     .sort();
 
   if (files.length === 0) {
-    console.error(`No images found in ${TEST_DIR}`);
-    console.log("Đặt các file ảnh chart mẫu (.png/.jpg) vào folder test-charts/ rồi chạy lại.");
+    logger.error("No images found", { testDir: TEST_DIR });
+    logger.info("Place sample chart images in test-charts and run again");
     process.exit(1);
   }
 
-  console.log(`📸 Found ${files.length} test chart(s):\n`);
+  logger.info("Found test charts", { count: files.length });
 
   const screenshots: ScreenshotResult[] = [];
   for (const file of files) {
@@ -28,49 +30,46 @@ async function main(): Promise<void> {
     const name = file.replace(extname(file), "").replace(/[-_]/g, " ");
     const chart: ChartConfig = { name, symbol: name, interval: "240", description: `Test — ${name}` };
     screenshots.push({ chart, buffer: Buffer.from(buffer), filepath });
-    console.log(`  📄 ${file}`);
+    logger.info("Loaded chart fixture", { file });
   }
 
-  console.log("\n🤖 Analyzing with AI...\n");
+  logger.info("Analyzing fixtures with AI");
   const result = await analyzeAllCharts(screenshots);
 
-  console.log("\n" + "=".repeat(60));
-  console.log("📊 KẾT QUẢ PHÂN TÍCH");
-  console.log("=".repeat(60));
+  logger.info("Analysis result start");
 
   if (result.summaries.length > 0) {
-    console.log("\n--- TỔNG QUAN ---");
+    logger.info("Summary overview");
     for (const s of result.summaries) {
       const icon = s.confidence >= 70 ? "🟢" : s.confidence >= 40 ? "🟡" : "🔴";
-      console.log(`${icon} ${s.pair} (${s.confidence}%) — ${s.trend}`);
-      console.log(`   ${s.status}\n`);
+      logger.info("Summary item", { icon, pair: s.pair, confidence: s.confidence, trend: s.trend, status: s.status });
     }
   }
 
   if (result.setups.length > 0) {
-    console.log("--- SETUP CHI TIẾT ---");
+    logger.info("Setup details");
     for (const setup of result.setups) {
-      console.log(`\n${"─".repeat(50)}`);
-      console.log(`🎯 ${setup.pair} — ${setup.direction} (${setup.confidence}%)`);
-      console.log(`📋 Pattern: ${setup.setup}`);
-      console.log(`   ${getPatternDescription(setup.setup)}`);
-      console.log(`\n   Entry     : ${setup.entry}`);
-      console.log(`   Stop Loss : ${setup.stopLoss}`);
-      console.log(`   TP1       : ${setup.takeProfit1}`);
-      console.log(`   TP2       : ${setup.takeProfit2}`);
-      console.log(`   R:R       : ${setup.riskReward}`);
-      console.log(`\n   ✅ Lý do:`);
-      for (const r of setup.reasons) console.log(`      • ${r}`);
-      console.log(`   ⚠️  Rủi ro:`);
-      for (const r of setup.risks || []) console.log(`      • ${r}`);
-      console.log(`\n   💡 ${setup.summary}`);
+      logger.info("Setup item", {
+        pair: setup.pair,
+        direction: setup.direction,
+        confidence: setup.confidence,
+        pattern: setup.setup,
+        description: getPatternDescription(setup.setup),
+        entry: setup.entry,
+        stopLoss: setup.stopLoss,
+        takeProfit1: setup.takeProfit1,
+        takeProfit2: setup.takeProfit2,
+        riskReward: setup.riskReward,
+        reasons: setup.reasons,
+        risks: setup.risks,
+        summary: setup.summary,
+      });
     }
   } else {
-    console.log(`\n⏸ Không tìm thấy setup ≥70%`);
-    if (result.noSetupReason) console.log(`   Lý do: ${result.noSetupReason}`);
+    logger.info("No setup found above threshold", { threshold: 70, reason: result.noSetupReason || undefined });
   }
 
-  console.log("\n" + "=".repeat(60));
+  logger.info("Analysis result complete");
 }
 
 function getPatternDescription(setup: string): string {
@@ -93,6 +92,6 @@ function getPatternDescription(setup: string): string {
 }
 
 main().catch((error) => {
-  console.error("Error:", error);
+  logger.error("Error", { error });
   process.exit(1);
 });

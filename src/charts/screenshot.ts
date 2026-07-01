@@ -3,12 +3,14 @@ import { mkdir } from "fs/promises";
 import { join } from "path";
 import { CHARTS, buildChartHtml } from "./charts.config.js";
 import type { ScreenshotResult } from "../shared/types.js";
+import { createLogger } from "../shared/logger.js";
 
 const SCREENSHOT_DIR = join(process.cwd(), "screenshots");
 const VIEWPORT = { width: 1400, height: 900 };
 const CHART_LOAD_TIMEOUT = 30_000;
 const CHART_RENDER_DELAY = 8_000;
 const PARALLEL_TABS = 4;
+const logger = createLogger("charts:screenshot");
 
 export function findChartForPair(pair: string) {
   const normalized = pair.replace("/", "").toUpperCase();
@@ -42,9 +44,9 @@ export async function captureAllCharts(): Promise<ScreenshotResult[]> {
       for (const r of batchResults) {
         if (r.status === "fulfilled") {
           results.push(r.value);
-          console.log(`  ✓ Captured: ${r.value.chart.name}`);
+          logger.info("Captured chart", { chart: r.value.chart.name });
         } else {
-          console.error(`  ✗ Failed:`, r.reason);
+          logger.error("Failed to capture chart", { error: r.reason });
         }
       }
     }

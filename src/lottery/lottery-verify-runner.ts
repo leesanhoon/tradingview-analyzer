@@ -5,7 +5,9 @@ import { loadUnverifiedPredictions, markPredictionVerified } from "./lottery-pre
 import { WEEKDAY_LABELS } from "./lottery-schedule.js";
 import { sendMessage } from "../shared/telegram.js";
 import type { LotteryRegion } from "./lottery-types.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("lottery:lottery-verify-runner");
 const REGION_LABELS: Record<LotteryRegion, string> = {
   "mien-bac": "🟦 Miền Bắc",
   "mien-trung": "🟨 Miền Trung",
@@ -21,18 +23,18 @@ function vnToday(): { dateStr: string; weekday: number } {
 export async function runLotteryVerify(region: LotteryRegion): Promise<void> {
   const { dateStr, weekday } = vnToday();
   const weekdayLabel = WEEKDAY_LABELS[weekday];
-  console.log(`🔍 Lottery Verify [${region}] — ${weekdayLabel} ${dateStr}\n`);
+  logger.info(`🔍 Lottery Verify [${region}] — ${weekdayLabel} ${dateStr}\n`);
 
   const predictions = await loadUnverifiedPredictions(dateStr, region);
   if (predictions.length === 0) {
-    console.log("✓ Không có dự đoán nào cần xác minh hôm nay.");
+    logger.info("✓ Không có dự đoán nào cần xác minh hôm nay.");
     await sendMessage(`🔍 *DÒ KẾT QUẢ* — ${REGION_LABELS[region]}\n📅 ${weekdayLabel}, ${dateStr}\n\nKhông có dự đoán nào để xác minh hôm nay.`);
     return;
   }
 
   const actualRecords = await fetchActualRecords(region, dateStr, weekday);
   if (actualRecords.length === 0) {
-    console.log("✓ Chưa có kết quả thật hôm nay — bỏ qua, lần chạy sau (theo lịch) sẽ thử lại.");
+    logger.info("✓ Chưa có kết quả thật hôm nay — bỏ qua, lần chạy sau (theo lịch) sẽ thử lại.");
     await sendMessage(
       `🔍 *DÒ KẾT QUẢ* — ${REGION_LABELS[region]}\n📅 ${weekdayLabel}, ${dateStr}\n\n⏳ Chưa có kết quả quay số hôm nay trên xoso.com.vn — thử lại sau.`,
     );
@@ -40,7 +42,7 @@ export async function runLotteryVerify(region: LotteryRegion): Promise<void> {
   }
 
   await appendWeekdayHistory(weekday, actualRecords);
-  console.log(`✓ Đã lưu ${actualRecords.length} bản ghi kết quả thật vào lottery_draws.`);
+  logger.info(`✓ Đã lưu ${actualRecords.length} bản ghi kết quả thật vào lottery_draws.`);
 
   const lines: string[] = [`🔍 *DÒ KẾT QUẢ* — ${REGION_LABELS[region]}`, `📅 ${weekdayLabel}, ${dateStr}`, ""];
   let hitCount = 0;
@@ -64,11 +66,12 @@ export async function runLotteryVerify(region: LotteryRegion): Promise<void> {
 
     const detail = hit ? `✅ TRÚNG${matchedPrize ? ` — ${matchedPrize}` : ""}${matchedProvince ? ` (${matchedProvince})` : ""}` : "❌ Không trúng";
     lines.push(`#${prediction.rank} \`${prediction.number}\`  —  ${detail}`);
-    console.log(`✓ [${prediction.number}] ${hit ? "TRÚNG" : "không trúng"}`);
+    logger.info(`✓ [${prediction.number}] ${hit ? "TRÚNG" : "không trúng"}`);
   }
 
   lines.push("");
   lines.push(`*Tổng kết: trúng ${hitCount}/${predictions.length}*`);
   await sendMessage(lines.join("\n"));
-  console.log(`\n✅ Hoàn tất. Trúng ${hitCount}/${predictions.length}.`);
+  logger.info(`\n✅ Hoàn tất. Trúng ${hitCount}/${predictions.length}.`);
 }
+

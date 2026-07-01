@@ -4,7 +4,9 @@ import { buildLotteryDataset, lotteryFilename } from "./lottery-format.js";
 import { WEEKDAY_LABELS } from "./lottery-schedule.js";
 import { sendDocument, sendMessage } from "../shared/telegram.js";
 import type { LotteryDrawRecord, LotteryRegion } from "./lottery-types.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("lottery:lottery-runner");
 const REGIONS: LotteryRegion[] = ["mien-bac", "mien-trung", "mien-nam"];
 
 function vnDateOffset(offsetDays: number): { dateStr: string; weekday: number } {
@@ -33,7 +35,7 @@ export async function runLotteryCheck(): Promise<void> {
   const target = isAfter19h ? vnDateOffset(1) : today;
   const todayLabel = WEEKDAY_LABELS[today.weekday];
   const targetLabel = WEEKDAY_LABELS[target.weekday];
-  console.log(`🎰 Lottery History Scanner — hôm nay ${todayLabel} ${today.dateStr}, ${isAfter19h ? "sau 19h" : "trước 19h"} nên chuẩn bị data cho ${targetLabel} ${target.dateStr}\n`);
+  logger.info(`🎰 Lottery History Scanner — hôm nay ${todayLabel} ${today.dateStr}, ${isAfter19h ? "sau 19h" : "trước 19h"} nên chuẩn bị data cho ${targetLabel} ${target.dateStr}\n`);
 
   const historyToday = await loadWeekdayHistory(today.weekday);
   const regionsAlreadyToday = new Set(historyToday.filter((r) => r.date === today.dateStr).map((r) => r.region));
@@ -43,18 +45,18 @@ export async function runLotteryCheck(): Promise<void> {
 
   for (const region of REGIONS) {
     if (regionsAlreadyToday.has(region)) {
-      console.log(`✓ [${region}] Đã có dữ liệu hôm nay (${today.dateStr}) — bỏ qua, không fetch lại.\n`);
+      logger.info(`✓ [${region}] Đã có dữ liệu hôm nay (${today.dateStr}) — bỏ qua, không fetch lại.\n`);
       continue;
     }
 
     try {
-      console.log(`📡 [${region}] Lấy kết quả hôm nay (${today.dateStr})...`);
+      logger.info(`📡 [${region}] Lấy kết quả hôm nay (${today.dateStr})...`);
       const records = await fetchActualRecords(region, today.dateStr, today.weekday);
       todayRecords.push(...records);
-      console.log(`✓ [${region}] Lấy được ${records.length} bản ghi.\n`);
+      logger.info(`✓ [${region}] Lấy được ${records.length} bản ghi.\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`✗ [${region}] Lấy dữ liệu thất bại: ${message}\n`);
+      logger.error(`✗ [${region}] Lấy dữ liệu thất bại: ${message}\n`);
       failures.push(`${region}: ${message}`);
     }
   }
@@ -68,7 +70,7 @@ export async function runLotteryCheck(): Promise<void> {
   const historyForTarget = await loadWeekdayHistory(target.weekday);
   if (historyForTarget.length === 0) {
     await sendMessage(`🎰 *Lottery History Scanner*\nChưa có dữ liệu lịch sử cho ${targetLabel} (${target.dateStr}) — bỏ qua, không gửi file.`);
-    console.log("\n✓ Không có dữ liệu để gửi.");
+    logger.info("\n✓ Không có dữ liệu để gửi.");
     return;
   }
 
@@ -84,8 +86,9 @@ export async function runLotteryCheck(): Promise<void> {
       filename,
       `🎰 Chuẩn bị cho ${targetLabel} ${target.dateStr} — ${region} (${recordsForRegion.length} kỳ tích lũy)`,
     );
-    console.log(`✓ Đã gửi file ${filename} (${recordsForRegion.length} bản ghi, ${region}, cho ${targetLabel}).`);
+    logger.info(`✓ Đã gửi file ${filename} (${recordsForRegion.length} bản ghi, ${region}, cho ${targetLabel}).`);
   }
 
-  console.log("\n✅ Hoàn tất.");
+  logger.info("\n✅ Hoàn tất.");
 }
+

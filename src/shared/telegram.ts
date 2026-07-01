@@ -1,5 +1,7 @@
 import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
+import { createLogger } from "./logger.js";
 
+const logger = createLogger("shared:telegram");
 export type InlineKeyboardMarkup = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 };
@@ -81,7 +83,7 @@ export async function notifyError(scope: string, error: unknown): Promise<void> 
   try {
     await sendMessage(`🔴 *Lỗi: ${scope}*\n\n\`\`\`\n${message.slice(0, 3500)}\n\`\`\``);
   } catch (notifyErr) {
-    console.error("Failed to send error notification to Telegram:", notifyErr);
+    logger.error("Failed to send error notification to Telegram:", notifyErr);
   }
 }
 
@@ -285,7 +287,7 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     await sendMessage(
       `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền\n\n⏸ Không có setup đạt yêu cầu (>80%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
-    console.log("  → No high-confidence setups. Notification sent.");
+    logger.info("  → No high-confidence setups. Notification sent.");
     return;
   }
 
@@ -307,7 +309,7 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     await sendMessage(
       `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
-    console.log(`  → ${reason}`);
+    logger.info(`  → ${reason}`);
     return;
   }
 
@@ -319,16 +321,17 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
       try {
         const caption = `📊 ${setup.pair} H4 — ${setup.direction} (${confidence}% 🔥)`;
         await sendPhoto(screenshot.buffer, caption);
-        console.log(`  ✓ Sent chart: ${setup.pair} (confidence ${confidence}%)`);
+        logger.info(`  ✓ Sent chart: ${setup.pair} (confidence ${confidence}%)`);
       } catch (error) {
-        console.error(`  ✗ Failed to send chart ${setup.pair}:`, error);
+        logger.error(`  ✗ Failed to send chart ${setup.pair}:`, error);
       }
     }
 
     await sendMessage(buildCopyableSetup(setup));
-    console.log(`  ✓ Sent setup: ${setup.pair} ${setup.direction}`);
+    logger.info(`  ✓ Sent setup: ${setup.pair} ${setup.direction}`);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
   await sendMessage(`✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 80%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
 }
+

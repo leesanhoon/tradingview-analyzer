@@ -2,7 +2,9 @@ import { GoogleGenAI } from "@google/genai";
 import { withRetry } from "../shared/retry.js";
 import type { MatchAiAnalysis, MatchOddsPayload } from "./betting-types.js";
 import { formatOddsAnalysisInput } from "./odds-text-format.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("betting:betting-gemini");
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
 const VERIFY_MODEL_FALLBACK = "gemini-3.5-flash";
@@ -224,7 +226,7 @@ export async function analyzeMatchOdds(payload: MatchOddsPayload): Promise<Match
 
   const response = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Gemini match analysis temporary error for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -278,7 +280,7 @@ export async function verifyMatchAnalysis(
   const callVerifyModel = async (model: string): Promise<{ confirmed: boolean; confidence: number; comment: string }> => {
     const response = await withRetry(buildRequest(model), {
       onRetry: (error, attempt, maxAttempts, delayMs) => {
-        console.warn(
+        logger.warn(
           `  ! Gemini match verify temporary error with ${model} for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
             error instanceof Error ? error.message : error
           }`,
@@ -297,7 +299,7 @@ export async function verifyMatchAnalysis(
   try {
     return await callVerifyModel(VERIFY_MODEL_PRIMARY);
   } catch (primaryError) {
-    console.warn(
+    logger.warn(
       `  ! Gemini match verify failed with ${VERIFY_MODEL_PRIMARY} for ${payload.home} vs ${payload.away}, falling back to ${VERIFY_MODEL_FALLBACK}: ${
         primaryError instanceof Error ? primaryError.message : primaryError
       }`,
@@ -336,7 +338,7 @@ export async function reviseMatchAnalysis(
 
   const response = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Gemini match revise temporary error for ${payload.home} vs ${payload.away} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -346,10 +348,13 @@ export async function reviseMatchAnalysis(
 
   const parsed = parseMatchAnalysisResponse(response.text ?? "", payload);
   if (!parsed) {
-    console.warn(
+    logger.warn(
       `  ! Gemini revise parse failed for ${payload.home} vs ${payload.away}, falling back to conservative revision. Raw: ${(response.text ?? "").slice(0, 300)}`,
     );
     return buildFallbackRevisedAnalysis(payload, original, rejectionComment);
   }
   return parsed;
 }
+
+
+

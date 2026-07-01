@@ -5,7 +5,9 @@ import { predictTopNumbers } from "./lottery-predict.js";
 import { savePredictions } from "./lottery-predictions-repository.js";
 import { sendMessage, notifyError } from "../shared/telegram.js";
 import type { LotteryRegion } from "./lottery-types.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("lottery:lottery-predict-resync-index");
 type PredictionGroup = {
   date: string;
   weekday: number;
@@ -57,7 +59,7 @@ async function sendResyncSummary(lines: string[]): Promise<void> {
 
 async function main(): Promise<void> {
   const today = vnToday();
-  console.log(`Resync lottery predictions starting from ${today}`);
+  logger.info(`Resync lottery predictions starting from ${today}`);
 
   const { data, error } = await (getDb().from("lottery_predictions") as any)
     .select("date, weekday, region, number")
@@ -103,14 +105,14 @@ async function main(): Promise<void> {
   for (const group of groups.values()) {
     const history = (await historyForWeekday(group.weekday)).filter((record) => record.region === group.region);
     if (history.length === 0) {
-      console.log(`Skip ${group.region} ${group.date}: no history for weekday ${group.weekday}`);
+      logger.info(`Skip ${group.region} ${group.date}: no history for weekday ${group.weekday}`);
       continue;
     }
 
     const fresh = predictTopNumbers(history, group.region, 3);
     const freshNumbers = new Set(fresh.map((prediction) => prediction.number));
     if (sameNumberSet(group.numbers, freshNumbers)) {
-      console.log(`OK   ${group.region} ${group.date}: no change`);
+      logger.info(`OK   ${group.region} ${group.date}: no change`);
       continue;
     }
 
@@ -118,13 +120,13 @@ async function main(): Promise<void> {
     resynced.push(
       `${group.region} ${group.date}: ${formatNumbers(group.numbers)} -> ${formatNumbers(freshNumbers)}`,
     );
-    console.log(`Update ${group.region} ${group.date}: ${formatNumbers(group.numbers)} -> ${formatNumbers(freshNumbers)}`);
+    logger.info(`Update ${group.region} ${group.date}: ${formatNumbers(group.numbers)} -> ${formatNumbers(freshNumbers)}`);
   }
 
   if (resynced.length === 0) {
-    console.log("No predictions needed resync.");
+    logger.info("No predictions needed resync.");
   } else {
-    console.log(`Resynced ${resynced.length} prediction group(s).`);
+    logger.info(`Resynced ${resynced.length} prediction group(s).`);
   }
 
   await sendResyncSummary(
@@ -135,7 +137,9 @@ async function main(): Promise<void> {
 }
 
 main().catch(async (error) => {
-  console.error("Fatal error:", error);
+  logger.error("Fatal error:", error);
   await notifyError("Lottery Predict Resync", error);
   process.exit(1);
 });
+
+

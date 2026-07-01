@@ -3,7 +3,9 @@ import type { AnalysisResult, PairSummary, ScreenshotResult, TradeSetup } from "
 import { extractTextFromClaudeResponse, getClaudeClient } from "../shared/claude.js";
 import { withRetry } from "../shared/retry.js";
 import { captureVerificationChartScreenshot, findChartForPair } from "./screenshot.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("charts:analyzer");
 const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
 const ANALYSIS_MODEL = "gemini-3.5-flash";
 
@@ -164,7 +166,7 @@ async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<strin
 
   const result = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Gemini main analysis temporary error (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -209,7 +211,7 @@ async function verifySetupWithClaude(
 
   const result = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Claude verify temporary error for ${setup.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -259,7 +261,7 @@ export async function verifySetupWithGeminiModel(
 
   const result = await withRetry(request, {
     onRetry: (error, attempt, maxAttempts, delayMs) => {
-      console.warn(
+      logger.warn(
         `  ! Gemini verify temporary error with ${model} for ${setup.pair} (${attempt}/${maxAttempts}), retrying in ${delayMs}ms: ${
           error instanceof Error ? error.message : error
         }`,
@@ -287,7 +289,7 @@ async function verifySetupWithGemini(
   try {
     return await verifySetupWithGeminiModel(setup, verificationChart.buffer, VERIFY_MODEL_PRIMARY);
   } catch (primaryError) {
-    console.warn(
+    logger.warn(
       `  ! Gemini verify failed with ${VERIFY_MODEL_PRIMARY} for ${setup.pair}, falling back to Claude Sonnet 4.6: ${
         primaryError instanceof Error ? primaryError.message : primaryError
       }`,
@@ -315,9 +317,9 @@ export async function confirmHighConfidenceSetups(
     }
 
     try {
-      console.log(`  -> Verifying ${setup.pair} with Gemini 2.5 Pro (fallback Claude Sonnet 4.6)...`);
+      logger.info(`  -> Verifying ${setup.pair} with Gemini 2.5 Pro (fallback Claude Sonnet 4.6)...`);
       const verification = await verifySetupWithGemini(setup, chart);
-      console.log(
+      logger.info(
         `  ${verification.confirmed ? "✓" : "✗"} ${setup.pair}: ${verification.verifiedBy} ${
           verification.confirmed ? "confirmed" : "rejected"
         } (${verification.confidence}%) - ${verification.comment}`,
@@ -330,7 +332,7 @@ export async function confirmHighConfidenceSetups(
         verifiedBy: verification.verifiedBy,
       });
     } catch (error) {
-      console.warn(`  ! Verify failed for ${setup.pair}: ${error instanceof Error ? error.message : error}`);
+      logger.warn(`  ! Verify failed for ${setup.pair}: ${error instanceof Error ? error.message : error}`);
       result.push(setup);
     }
   }
@@ -339,12 +341,14 @@ export async function confirmHighConfidenceSetups(
 }
 
 export async function analyzeAllCharts(screenshots: ScreenshotResult[]): Promise<AnalysisResult> {
-  console.log("  -> Trying Gemini 3.5 Flash...");
+  logger.info("  -> Trying Gemini 3.5 Flash...");
   const rawResponse = await analyzeWithGemini(screenshots);
-  console.log("  ✓ Analyzed by Gemini 3.5 Flash");
+  logger.info("  ✓ Analyzed by Gemini 3.5 Flash");
 
   const { summaries, setups, noSetupReason } = parseAnalysisResponse(rawResponse);
-  console.log(`  ✓ ${summaries.length} pairs scanned, ${setups.length} setup(s) >=70% confidence`);
+  logger.info(`  ✓ ${summaries.length} pairs scanned, ${setups.length} setup(s) >=70% confidence`);
 
   return { summaries, setups, noSetupReason, screenshots };
 }
+
+

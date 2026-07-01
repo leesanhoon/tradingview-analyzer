@@ -9,7 +9,9 @@ import {
   formatOddsDataMessage,
   formatOddsFallbackMessage,
 } from "./odds-text-format.js";
+import { createLogger } from "../shared/logger.js";
 
+const logger = createLogger("betting:odds-runner");
 function formatKickoff(unixSeconds: number): string {
   return new Date(unixSeconds * 1000).toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -29,20 +31,20 @@ const LABEL = "Match Odds";
  * Chay 1 lan/ngay (cron 12h trua) hoac chay tay - luon gui lai toan bo, khong dedup.
  */
 export async function runOddsCheck(): Promise<void> {
-  console.log(`🏆 ${LABEL} - Starting...\n`);
+  logger.info(`🏆 ${LABEL} - Starting...\n`);
 
   const upcoming = await loadUpcomingMatches();
   const matches = pickNearestUpcomingDateMatches(upcoming);
-  console.log(`✓ ${matches.length} tran chua da cua ngay gan nhat (${matches[0]?.date ?? "-"})\n`);
+  logger.info(`✓ ${matches.length} tran chua da cua ngay gan nhat (${matches[0]?.date ?? "-"})\n`);
 
   if (matches.length === 0) {
     await sendMessage(`⏸ [${LABEL}] Khong co tran nao sap toi trong DB - hay chay lai fetch-matches-list.`);
-    console.log("✓ Khong co tran nao sap toi - bo qua, khong gui Telegram.\n");
+    logger.info("✓ Khong co tran nao sap toi - bo qua, khong gui Telegram.\n");
     return;
   }
 
   const bookmakerKey = getConfiguredBookmaker();
-  console.log(`📊 Do + lay TOAN BO market tu bookmaker "${bookmakerKey}" cho tung tran...`);
+  logger.info(`📊 Do + lay TOAN BO market tu bookmaker "${bookmakerKey}" cho tung tran...`);
   const { payload, failures } = await buildOddsPayload(matches);
 
   if (failures.length > 0) {
@@ -66,7 +68,7 @@ export async function runOddsCheck(): Promise<void> {
   await sendMessage(statusText);
 
   if (payload.length === 0) {
-    console.log("\n✓ Khong co tran can gui.");
+    logger.info("\n✓ Khong co tran can gui.");
     return;
   }
 
@@ -75,7 +77,7 @@ export async function runOddsCheck(): Promise<void> {
     await sendMessage(`⚠️ [${LABEL}] GEMINI_API_KEY chua duoc cau hinh - se gui raw odds cho tung tran.`);
   }
 
-  console.log(`\n📤 Gui tung tran len Telegram (${aiEnabled ? "Gemini analysis" : "raw odds fallback"})...`);
+  logger.info(`\n📤 Gui tung tran len Telegram (${aiEnabled ? "Gemini analysis" : "raw odds fallback"})...`);
   for (const match of payload) {
     if (!aiEnabled) {
       await sendMessage(formatOddsFallbackMessage(match, "thieu GEMINI_API_KEY"));
@@ -90,26 +92,28 @@ export async function runOddsCheck(): Promise<void> {
         analysis.verifiedConfirmed = true;
         analysis.verifiedConfidence = verification.confidence;
         analysis.verifiedComment = verification.comment;
-        console.log(`  ✓ Verify ${match.home} vs ${match.away}: confirmed (${verification.confidence}%)`);
+        logger.info(`  ✓ Verify ${match.home} vs ${match.away}: confirmed (${verification.confidence}%)`);
       } else {
-        console.log(`  ✗ Verify ${match.home} vs ${match.away}: rejected (${verification.confidence}%) - ${verification.comment}`);
+        logger.info(`  ✗ Verify ${match.home} vs ${match.away}: rejected (${verification.confidence}%) - ${verification.comment}`);
         analysis = await reviseMatchAnalysis(match, analysis, verification.comment);
         analysis.verifiedConfirmed = false;
         analysis.verifiedConfidence = verification.confidence;
         analysis.verifiedComment = `Nhan dinh da duoc dieu chinh sau khi bi tu choi: ${verification.comment}`;
         analysis.revisedAfterReject = true;
-        console.log(`  ↻ Revised ${match.home} vs ${match.away} thanh nhan dinh moi`);
+        logger.info(`  ↻ Revised ${match.home} vs ${match.away} thanh nhan dinh moi`);
       }
 
       await sendMessage(formatMatchAnalysisMessage(match, analysis));
       await sendMessage(formatOddsDataMessage(match));
-      console.log(`  ✓ Gemini analyzed: ${match.home} vs ${match.away}`);
+      logger.info(`  ✓ Gemini analyzed: ${match.home} vs ${match.away}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`  ⚠ Gemini failed for ${match.home} vs ${match.away}: ${message}`);
+      logger.warn(`  ⚠ Gemini failed for ${match.home} vs ${match.away}: ${message}`);
       await sendMessage(formatOddsFallbackMessage(match, message.slice(0, 200)));
     }
   }
 
-  console.log(`\n✅ Da gui ${payload.length} tran dau len Telegram.`);
+  logger.info(`\n✅ Da gui ${payload.length} tran dau len Telegram.`);
 }
+
+

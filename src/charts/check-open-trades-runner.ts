@@ -2,6 +2,9 @@ import { captureVerificationChartScreenshot, findChartForPair } from "./screensh
 import { closePosition, loadOpenPositions, updatePositionDecision } from "./positions-repository.js";
 import { decidePosition } from "./position-decision.js";
 import { buildPositionDecisionMessage, sendMessage, sendPhoto } from "../shared/telegram.js";
+import { createLogger } from "../shared/logger.js";
+
+const logger = createLogger("charts:check-open-trades");
 
 function formatCheckedAt(): string {
   return new Date().toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
@@ -10,7 +13,7 @@ function formatCheckedAt(): string {
 async function processPosition(position: Awaited<ReturnType<typeof loadOpenPositions>>[number]): Promise<void> {
   const chart = findChartForPair(position.pair);
   if (!chart) {
-    console.warn(`⚠️ Không tìm thấy cấu hình chart cho ${position.pair}`);
+    logger.warn("No chart configuration found", { pair: position.pair });
     return;
   }
 
@@ -46,27 +49,29 @@ async function processPosition(position: Awaited<ReturnType<typeof loadOpenPosit
 }
 
 export async function runCheckOpenTrades(): Promise<void> {
-  console.log("🔎 Check Open Trades - bắt đầu...");
+  logger.info("Check open trades starting");
   const positions = await loadOpenPositions();
   if (positions.length === 0) {
-    console.log("✓ Không có vị thế nào đang mở.");
+    logger.info("No open positions");
     return;
   }
 
-  console.log(`✓ Đã tải ${positions.length} vị thế đang mở.`);
+  logger.info("Loaded open positions", { count: positions.length });
 
   for (const position of positions) {
     try {
-      console.log(`→ Đang kiểm tra #${position.id} ${position.pair}...`);
+      logger.info("Checking open position", { id: position.id, pair: position.pair });
       await processPosition(position);
-      console.log(`✓ Đã xong #${position.id} ${position.pair}`);
+      logger.info("Finished open position", { id: position.id, pair: position.pair });
     } catch (error) {
-      console.error(`✗ Lỗi #${position.id} ${position.pair}:`, error);
+      logger.error("Failed to check open position", { id: position.id, pair: position.pair, error });
       await sendMessage(
         `⚠️ *Check Open Trades*\n\nKhông thể kiểm tra vị thế #${position.id} ${position.pair}:\n${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
 
-  console.log("✓ Hoàn tất.");
+  logger.info("Check open trades complete");
 }
+
+
