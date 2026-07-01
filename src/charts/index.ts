@@ -11,9 +11,9 @@ const logger = createLogger("charts:index");
 
 async function main(): Promise<void> {
   const startTime = Date.now();
-  logger.info("Bob Volman H4 Scanner starting");
+  logger.info("Bob Volman multi-timeframe scanner starting");
 
-  logger.info("Capturing all forex charts", { interval: "H4", indicator: "EMA 20" });
+  logger.info("Capturing all forex charts", { intervals: ["D1", "H4", "M15"], indicators: ["EMA 20", "volume"] });
   const screenshots = await captureAllCharts();
 
   if (screenshots.length === 0) {
@@ -75,6 +75,6 @@ async function main(): Promise<void> {
 
 main().catch(async (error) => {
   logger.error("Fatal error", { error });
-  await notifyError("Bob Volman H4 Scanner", error);
+  await notifyError("Bob Volman multi-timeframe scanner", error);
   process.exit(1);
 });

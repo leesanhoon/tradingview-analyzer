@@ -6,7 +6,7 @@ Nguồn: [docs/plan-for-app.md](../plan-for-app.md). Mỗi phase dưới đây l
 |---|-------|---------|------------|
 | 01 | [Testing tự động](01-testing.md) | Cao | done |
 | 02 | [Structured logging](02-structured-logging.md) | Cao | done |
-| 03 | [Webhook idempotency](03-webhook-idempotency.md) | Cao | todo |
+| 03 | [Webhook idempotency](03-webhook-idempotency.md) | Cao | done |
 | 04 | [Rate limiting chủ động](04-rate-limiting.md) | Cao | done |
 | 05 | [Position decision engine](05-position-decision-engine.md) | Trung bình | done |
 | 06 | [Performance tracking](06-performance-tracking.md) | Trung bình | done |

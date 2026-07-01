@@ -1,4 +1,5 @@
-import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
+import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "../charts/chart-types.js";
+import type { Notifier } from "./notifier.js";
 import { createLogger } from "./logger.js";
 import type { PerformanceReport } from "../charts/performance-tracking.js";
 
@@ -330,18 +331,27 @@ export function buildPerformanceReportMessage(report: PerformanceReport): string
 
 function findScreenshot(pair: string, screenshots: ScreenshotResult[]): ScreenshotResult | undefined {
   const normalized = pair.replace("/", "").toUpperCase();
-  return screenshots.find((s) => s.chart.symbol.toUpperCase().includes(normalized));
+  return (
+    screenshots.find(
+      (s) => s.chart.symbol.toUpperCase().includes(normalized) && s.chart.timeframe === "H4",
+    ) ?? screenshots.find((s) => s.chart.symbol.toUpperCase().includes(normalized))
+  );
 }
 
-export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
+export const telegramNotifier: Notifier = { sendMessage, sendPhoto };
+
+export async function sendAllAnalyses(
+  result: AnalysisResult,
+  notifier: Notifier = telegramNotifier,
+): Promise<void> {
   const timestamp = new Date().toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
   // No setups at all from analyzer (≥70%)
   if (result.setups.length === 0) {
-    await sendMessage(
-      `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền\n\n⏸ Không có setup đạt yêu cầu (>80%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+    await notifier.sendMessage(
+      `🚀 *Bob Volman Multi-Timeframe Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền (D1/H4/M15 + volume)\n\n⏸ Không có setup đạt yêu cầu (>80%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
     logger.info("  → No high-confidence setups. Notification sent.");
     return;
@@ -353,8 +363,8 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
   const headerSuffix = geminiHighConfSetups.length > 0 ? " (>80%, đã đối chiếu Gemini 2.5 Pro -> Claude Sonnet 4.6)" : " (>80%)";
 
   // Header
-  await sendMessage(
-    `🚀 *Bob Volman H4 Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp — tìm thấy *${highConfSetups.length}* setup${headerSuffix}`,
+  await notifier.sendMessage(
+    `🚀 *Bob Volman Multi-Timeframe Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp (D1/H4/M15 + volume) — tìm thấy *${highConfSetups.length}* setup${headerSuffix}`,
   );
 
   if (highConfSetups.length === 0) {
@@ -362,7 +372,7 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
       geminiHighConfSetups.length === 0
         ? `Không tìm thấy setup nào > 80% (chỉ có ${result.setups.length} setup ở mức >=70%).`
         : `Tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng Gemini 2.5 Pro -> Claude Sonnet 4.6 đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
-    await sendMessage(
+    await notifier.sendMessage(
       `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
     logger.info(`  → ${reason}`);
@@ -376,18 +386,18 @@ export async function sendAllAnalyses(result: AnalysisResult): Promise<void> {
     if (screenshot) {
       try {
         const caption = `📊 ${setup.pair} H4 — ${setup.direction} (${confidence}% 🔥)`;
-        await sendPhoto(screenshot.buffer, caption);
+        await notifier.sendPhoto(screenshot.buffer, caption);
         logger.info(`  ✓ Sent chart: ${setup.pair} (confidence ${confidence}%)`);
       } catch (error) {
         logger.error(`  ✗ Failed to send chart ${setup.pair}:`, error);
       }
     }
 
-    await sendMessage(buildCopyableSetup(setup));
+    await notifier.sendMessage(buildCopyableSetup(setup));
     logger.info(`  ✓ Sent setup: ${setup.pair} ${setup.direction}`);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
-  await sendMessage(`✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 80%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
+  await notifier.sendMessage(`✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 80%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
 }
 

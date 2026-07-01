@@ -10,16 +10,16 @@ Tăng giá trị sản phẩm: thêm khung thời gian khác ngoài H4, đa dạ
 
 ## Việc cần làm
 ### Đa khung thời gian
-- [ ] Thêm cấu hình M15 (vào lệnh chính xác hơn) và D1 (xác nhận xu hướng lớn) trong `charts.config.ts`.
-- [ ] Mở rộng `screenshot.ts` để chụp thêm các khung thời gian mới.
-- [ ] Cập nhật `analyzer.ts` để kết hợp phân tích đa khung thời gian (multi-timeframe confluence) thay vì chỉ H4 đơn lẻ.
+- [x] Thêm cấu hình M15 (vào lệnh chính xác hơn) và D1 (xác nhận xu hướng lớn) trong `charts.config.ts`.
+- [x] Mở rộng `screenshot.ts` để chụp thêm các khung thời gian mới.
+- [x] Cập nhật `analyzer.ts` để kết hợp phân tích đa khung thời gian (multi-timeframe confluence) thay vì chỉ H4 đơn lẻ.
 
 ### Đa dạng hoá nguồn xác nhận tín hiệu
-- [ ] Nghiên cứu thêm chỉ báo volume vào phân tích.
-- [ ] Thiết kế logic confluence: chỉ phát tín hiệu khi nhiều khung thời gian/chỉ báo đồng thuận, giảm false positive.
+- [x] Nghiên cứu thêm chỉ báo volume vào phân tích.
+- [x] Thiết kế logic confluence: chỉ phát tín hiệu khi nhiều khung thời gian/chỉ báo đồng thuận, giảm false positive.
 
 ### Đa kênh thông báo
-- [ ] Thiết kế interface chung cho "notifier" (hiện đang gắn cứng với Telegram trong nhiều file).
+- [x] Thiết kế interface chung cho "notifier" (hiện đang gắn cứng với Telegram trong nhiều file).
 
 ## Acceptance criteria
 - [ ] Tín hiệu mới có xác nhận multi-timeframe, giảm rõ rệt số lượng tín hiệu sai so với baseline H4-only (đo qua [Phase 07 - backtesting](07-backtesting.md)).

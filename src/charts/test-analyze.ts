@@ -1,12 +1,19 @@
 import "../shared/env.js";
 import { readdir, readFile } from "fs/promises";
 import { join, extname } from "path";
-import type { ScreenshotResult, ChartConfig } from "../shared/types.js";
+import type { ScreenshotResult, ChartConfig, ChartTimeframe } from "./chart-types.js";
 import { analyzeAllCharts } from "./analyzer.js";
 import { createLogger } from "../shared/logger.js";
 
 const TEST_DIR = join(process.cwd(), "test-charts");
 const logger = createLogger("charts:test-analyze");
+
+function inferTimeframe(fileName: string): ChartTimeframe {
+  const upper = fileName.toUpperCase();
+  if (upper.includes("D1")) return "D1";
+  if (upper.includes("M15")) return "M15";
+  return "H4";
+}
 
 async function main(): Promise<void> {
   logger.info("Bob Volman test analyzing sample charts");
@@ -28,9 +35,10 @@ async function main(): Promise<void> {
     const filepath = join(TEST_DIR, file);
     const buffer = await readFile(filepath);
     const name = file.replace(extname(file), "").replace(/[-_]/g, " ");
-    const chart: ChartConfig = { name, symbol: name, interval: "240", description: `Test — ${name}` };
+    const timeframe = inferTimeframe(file);
+    const chart: ChartConfig = { name: `${name} ${timeframe}`, symbol: name, interval: timeframe === "D1" ? "D" : timeframe === "M15" ? "15" : "240", description: `Test — ${name} — ${timeframe}`, timeframe };
     screenshots.push({ chart, buffer: Buffer.from(buffer), filepath });
-    logger.info("Loaded chart fixture", { file });
+    logger.info("Loaded chart fixture", { file, timeframe });
   }
 
   logger.info("Analyzing fixtures with AI");

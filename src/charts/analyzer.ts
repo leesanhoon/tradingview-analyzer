@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import type { AnalysisResult, PairSummary, ScreenshotResult, TradeSetup } from "../shared/types.js";
+import type { AnalysisResult, PairSummary, ScreenshotResult, TradeSetup } from "./chart-types.js";
 import { extractTextFromClaudeResponse, getClaudeClient } from "../shared/claude.js";
 import { withRetry } from "../shared/retry.js";
 import { captureVerificationChartScreenshot, findChartForPair } from "./screenshot.js";
@@ -23,18 +23,20 @@ type VerificationResult = {
   verifiedBy: string;
 };
 
-const SYSTEM_PROMPT = `Act as a professional price action trader who follows Bob Volman's methodology ("Understanding Price Action") and exclusively analyzes H4 charts with EMA 20. For each instrument provided, deliver a structured report comprising the following sections:
+const SYSTEM_PROMPT = `Act as a professional price-action trader using Bob Volman's methodology, EMA 20, and volume.
 
-1. Trend Context - State whether the market is trending up, down, or ranging, describe price relation to EMA 20 (above/below/crossing), and assess EMA 20's slope.
-2. EMA 20 Proximity (Primary Factor) - Quantify distance between price and EMA 20, classify proximity (at EMA, near within 2%, far above 2%), note any pullback or buildup/doji touches increasing confidence, and highlight that if price is far with no pullback, the guidance is to refrain from trading despite other patterns.
-3. Support/Resistance - Identify nearby S/R levels, round numbers, or accumulation zones being tested or broken.
-4. Volman's 7 Setups - Evaluate presence of RB, BB, ARB, FB, SB, DD, IRB patterns relative to EMA 20, indicating which setup is developing and its alignment with current trend.
-5. Three or More Reasons Not to Trade - List specific concerns (e.g. false break risk, lack of buildup, flat EMA, rejection candles, choppiness, price distant from EMA) that argue against entering.
-6. Conclusion - Recommend TRADE or NO TRADE, include a confidence percentage, and justify decision. If confidence is below 70%, conclude NO TRADE. Emphasize that only clear setups should trigger entries and urge waiting for pullbacks to EMA 20 before chasing breakouts.
+Analyze each instrument as one multi-timeframe package:
+- D1 establishes the dominant trend and major support/resistance.
+- H4 identifies the Volman setup (RB, BB, ARB, FB, SB, DD, or IRB) and is the primary decision timeframe.
+- M15 refines entry timing and rejects entries with noisy, contradictory price action.
+- Volume must confirm a breakout or rejection. Treat weak or declining volume as a risk, never as confirmation.
 
-Ensure each section is concise, factual, and consistent with the stated rules (EMA proximities prioritized, pullbacks preferred, no chasing distant breakouts).`;
+Only recommend TRADE when D1 and H4 direction agree, M15 does not contradict them, price is at or near H4 EMA 20 or has a clean buildup, and volume supports the move. Missing timeframes, conflicting trends, distant price without a pullback, flat EMA, weak volume, or poor risk/reward must reduce confidence. If fewer than two timeframes agree, or confidence is below 70%, conclude NO TRADE. Never invent unreadable price levels.`;
 
-const USER_PROMPT = `Analyze all attached H4 charts. Return only JSON with two keys: summaries and setups. In summaries include every pair with trend, emaProximity (tại/gần/xa EMA 20), status, and confidence. In setups include only setups with confidence >=70%; include pair, direction, setup description, emaTouch (true if price at EMA 20), reasons array, risks array, confidence, entry, stopLoss, takeProfit1, takeProfit2, riskReward, and summary. Provide specific price levels from the chart for entry, stopLoss, and takeProfits. Ensure status and setup descriptions reflect actual chart conditions, and omit any surrounding text.`;
+const USER_PROMPT = `Analyze the attached chart packages. Each image label contains pair and timeframe. Return only JSON with keys summaries, setups, and noSetupReason.
+
+In summaries include every pair with pair, trend (describe D1/H4/M15 alignment), emaProximity (tại/gần/xa), status, and confidence.
+In setups include only confluence setups with confidence >=70%; include pair, direction, setup, emaTouch, reasons, risks, confidence, entry, stopLoss, takeProfit1, takeProfit2, riskReward, and summary. Reasons must explicitly mention D1, H4, M15, and volume evidence. Provide levels from H4/M15. Omit surrounding text.`;
 
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -156,11 +158,16 @@ Keep comment short and specific.`;
 async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<string> {
   const ai = getClient();
   const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> = [];
-  for (const screenshot of screenshots) {
+  const orderedScreenshots = [...screenshots].sort((left, right) => {
+    const pairOrder = left.chart.symbol.localeCompare(right.chart.symbol);
+    if (pairOrder !== 0) return pairOrder;
+    return ["D1", "H4", "M15"].indexOf(left.chart.timeframe) - ["D1", "H4", "M15"].indexOf(right.chart.timeframe);
+  });
+  for (const screenshot of orderedScreenshots) {
     parts.push({
       inlineData: { mimeType: detectImageMimeType(screenshot.buffer), data: screenshot.buffer.toString("base64") },
     });
-    parts.push({ text: `[${screenshot.chart.name}]` });
+    parts.push({ text: `[PAIR=${screenshot.chart.name.replace(` ${screenshot.chart.timeframe}`, "")}; TIMEFRAME=${screenshot.chart.timeframe}]` });
   }
   parts.push({ text: SYSTEM_PROMPT + "\n\n" + USER_PROMPT });
 
@@ -341,8 +348,12 @@ export async function confirmHighConfidenceSetups(
   const result: TradeSetup[] = [];
 
   for (const setup of setups) {
-    const chart = findChartForPair(setup.pair);
-    const screenshot = chart ? screenshots.find((s) => s.chart.symbol === chart.symbol) : undefined;
+    const chart = findChartForPair(setup.pair, "H4");
+    const screenshot = chart
+      ? screenshots.find(
+          (s) => s.chart.symbol === chart.symbol && (!s.chart.timeframe || s.chart.timeframe === "H4"),
+        )
+      : undefined;
     if (!screenshot || !chart) {
       result.push(setup);
       continue;
@@ -378,9 +389,25 @@ export async function analyzeAllCharts(screenshots: ScreenshotResult[]): Promise
   logger.info("  ✓ Analyzed by Gemini 3.5 Flash");
 
   const { summaries, setups, noSetupReason } = parseAnalysisResponse(rawResponse);
-  logger.info(`  ✓ ${summaries.length} pairs scanned, ${setups.length} setup(s) >=70% confidence`);
+  const usesMultiTimeframeInput = screenshots.some((s) => Boolean(s.chart.timeframe));
+  const availableTimeframes = new Map<string, Set<string>>();
+  for (const screenshot of screenshots) {
+    const pair = screenshot.chart.name.replace(` ${screenshot.chart.timeframe}`, "");
+    const timeframes = availableTimeframes.get(pair) ?? new Set<string>();
+    timeframes.add(screenshot.chart.timeframe);
+    availableTimeframes.set(pair, timeframes);
+  }
+  const confluenceSetups = usesMultiTimeframeInput
+    ? setups.filter((setup) => {
+        const timeframes = availableTimeframes.get(setup.pair);
+        return timeframes && ["D1", "H4", "M15"].every((timeframe) => timeframes.has(timeframe));
+      })
+    : setups;
+  logger.info(
+    `  ✓ ${summaries.length} pairs scanned, ${confluenceSetups.length} complete multi-timeframe setup(s) >=70% confidence`,
+  );
 
-  return { summaries, setups, noSetupReason, screenshots };
+  return { summaries, setups: confluenceSetups, noSetupReason, screenshots };
 }
 
 

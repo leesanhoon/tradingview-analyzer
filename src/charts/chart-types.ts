@@ -1,8 +1,11 @@
+export type ChartTimeframe = "M15" | "H4" | "D1";
+
 export type ChartConfig = {
   name: string;
   symbol: string;
   interval: string;
   description: string;
+  timeframe: ChartTimeframe;
 };
 
 export type ScreenshotResult = {

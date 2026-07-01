@@ -1,4 +1,4 @@
-import type { TradeSetup } from "../shared/types.js";
+import type { TradeSetup } from "./chart-types.js";
 
 export type PositionDecisionAction = "NONE" | "PARTIAL_TP1" | "MOVE_SL_TO_BE" | "TRAIL_SL" | "TP2_CLOSE";
 

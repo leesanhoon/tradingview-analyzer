@@ -1,42 +1,52 @@
-import type { ChartConfig } from "../shared/types.js";
+import type { ChartConfig, ChartTimeframe } from "./chart-types.js";
 
-function chart(name: string, symbol: string): ChartConfig {
-  return { name: `${name} H4`, symbol, interval: "240", description: `${name} — H4` };
+const TIMEFRAME_CONFIGS: Array<{ timeframe: ChartTimeframe; interval: string }> = [
+  { timeframe: "D1", interval: "D" },
+  { timeframe: "H4", interval: "240" },
+  { timeframe: "M15", interval: "15" },
+];
+
+function chart(name: string, symbol: string, timeframe: ChartTimeframe, interval: string): ChartConfig {
+  return { name: `${name} ${timeframe}`, symbol, interval, description: `${name} — ${timeframe}`, timeframe };
 }
 
-export const CHARTS: ChartConfig[] = [
+const BASE_CHARTS: Array<{ name: string; symbol: string }> = [
   // Commodities
-  chart("XAU/USD", "OANDA:XAUUSD"),
-  chart("XAG/USD", "OANDA:XAGUSD"),
+  { name: "XAU/USD", symbol: "OANDA:XAUUSD" },
+  { name: "XAG/USD", symbol: "OANDA:XAGUSD" },
 
   // Major pairs — highest liquidity, tight spreads
-  chart("EUR/USD", "OANDA:EURUSD"),
-  chart("GBP/USD", "OANDA:GBPUSD"),
-  chart("USD/JPY", "OANDA:USDJPY"),
-  chart("AUD/USD", "OANDA:AUDUSD"),
-  chart("USD/CHF", "OANDA:USDCHF"),
-  chart("USD/CAD", "OANDA:USDCAD"),
-  chart("NZD/USD", "OANDA:NZDUSD"),
+  { name: "EUR/USD", symbol: "OANDA:EURUSD" },
+  { name: "GBP/USD", symbol: "OANDA:GBPUSD" },
+  { name: "USD/JPY", symbol: "OANDA:USDJPY" },
+  { name: "AUD/USD", symbol: "OANDA:AUDUSD" },
+  { name: "USD/CHF", symbol: "OANDA:USDCHF" },
+  { name: "USD/CAD", symbol: "OANDA:USDCAD" },
+  { name: "NZD/USD", symbol: "OANDA:NZDUSD" },
 
   // Cross pairs — good price action patterns
-  // chart("EUR/GBP", "OANDA:EURGBP"),
-  // chart("EUR/JPY", "OANDA:EURJPY"),
-  // chart("GBP/JPY", "OANDA:GBPJPY"),
-  // chart("AUD/JPY", "OANDA:AUDJPY"),
-  // chart("EUR/AUD", "OANDA:EURAUD"),
-  // chart("GBP/AUD", "OANDA:GBPAUD"),
-  // chart("EUR/CAD", "OANDA:EURCAD"),
+  // { name: "EUR/GBP", symbol: "OANDA:EURGBP" },
+  // { name: "EUR/JPY", symbol: "OANDA:EURJPY" },
+  // { name: "GBP/JPY", symbol: "OANDA:GBPJPY" },
+  // { name: "AUD/JPY", symbol: "OANDA:AUDJPY" },
+  // { name: "EUR/AUD", symbol: "OANDA:EURAUD" },
+  // { name: "GBP/AUD", symbol: "OANDA:GBPAUD" },
+  // { name: "EUR/CAD", symbol: "OANDA:EURCAD" },
 
   // Additional volatile crosses — strong momentum setups
-  // chart("CAD/JPY", "OANDA:CADJPY"),
-  // chart("CHF/JPY", "OANDA:CHFJPY"),
-  // chart("GBP/CHF", "OANDA:GBPCHF"),
-  // chart("EUR/NZD", "OANDA:EURNZD"),
-  // chart("GBP/NZD", "OANDA:GBPNZD"),
-  // chart("NZD/JPY", "OANDA:NZDJPY"),
-  // chart("AUD/CAD", "OANDA:AUDCAD"),
-  // chart("AUD/NZD", "OANDA:AUDNZD"),
+  // { name: "CAD/JPY", symbol: "OANDA:CADJPY" },
+  // { name: "CHF/JPY", symbol: "OANDA:CHFJPY" },
+  // { name: "GBP/CHF", symbol: "OANDA:GBPCHF" },
+  // { name: "EUR/NZD", symbol: "OANDA:EURNZD" },
+  // { name: "GBP/NZD", symbol: "OANDA:GBPNZD" },
+  // { name: "NZD/JPY", symbol: "OANDA:NZDJPY" },
+  // { name: "AUD/CAD", symbol: "OANDA:AUDCAD" },
+  // { name: "AUD/NZD", symbol: "OANDA:AUDNZD" },
 ];
+
+export const CHARTS: ChartConfig[] = BASE_CHARTS.flatMap((base) =>
+  TIMEFRAME_CONFIGS.map((timeframe) => chart(base.name, base.symbol, timeframe.timeframe, timeframe.interval)),
+);
 
 export function buildChartHtml(c: ChartConfig): string {
   return `<!DOCTYPE html>
@@ -56,7 +66,7 @@ new TradingView.widget({
   locale: "en",
   hide_top_toolbar: false,
   hide_side_toolbar: false,
-  hide_volume: true,
+  hide_volume: false,
   allow_symbol_change: false,
   save_image: false,
   withdateranges: true,

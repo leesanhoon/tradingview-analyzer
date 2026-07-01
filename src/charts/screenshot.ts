@@ -2,7 +2,7 @@ import { chromium, type BrowserContext } from "playwright";
 import { mkdir } from "fs/promises";
 import { join } from "path";
 import { CHARTS, buildChartHtml } from "./charts.config.js";
-import type { ScreenshotResult } from "../shared/types.js";
+import type { ChartTimeframe, ScreenshotResult } from "./chart-types.js";
 import { createLogger } from "../shared/logger.js";
 
 const SCREENSHOT_DIR = join(process.cwd(), "screenshots");
@@ -12,9 +12,29 @@ const CHART_RENDER_DELAY = 8_000;
 const PARALLEL_TABS = 4;
 const logger = createLogger("charts:screenshot");
 
-export function findChartForPair(pair: string) {
+function getTimeframeRank(timeframe: ChartTimeframe): number {
+  switch (timeframe) {
+    case "D1":
+      return 0;
+    case "H4":
+      return 1;
+    case "M15":
+      return 2;
+  }
+}
+
+export function findChartForPair(pair: string, preferredTimeframe: ChartTimeframe = "H4") {
   const normalized = pair.replace("/", "").toUpperCase();
-  return CHARTS.find((chart) => chart.symbol.toUpperCase().includes(normalized));
+  const matches = CHARTS.filter((chart) => chart.symbol.toUpperCase().includes(normalized));
+  if (matches.length === 0) {
+    return undefined;
+  }
+
+  return (
+    matches.find((chart) => chart.timeframe === preferredTimeframe) ??
+    matches.find((chart) => chart.timeframe === "H4") ??
+    matches.sort((left, right) => getTimeframeRank(left.timeframe) - getTimeframeRank(right.timeframe))[0]
+  );
 }
 
 type CaptureOptions = {
@@ -37,9 +57,7 @@ export async function captureAllCharts(): Promise<ScreenshotResult[]> {
 
     for (let i = 0; i < CHARTS.length; i += PARALLEL_TABS) {
       const batch = CHARTS.slice(i, i + PARALLEL_TABS);
-      const batchResults = await Promise.allSettled(
-        batch.map((chart) => captureChart(context, chart)),
-      );
+      const batchResults = await Promise.allSettled(batch.map((chart) => captureChart(context, chart)));
 
       for (const r of batchResults) {
         if (r.status === "fulfilled") {
@@ -75,9 +93,7 @@ export async function captureChartScreenshot(
   }
 }
 
-export async function captureVerificationChartScreenshot(
-  chart: (typeof CHARTS)[number],
-): Promise<ScreenshotResult> {
+export async function captureVerificationChartScreenshot(chart: (typeof CHARTS)[number]): Promise<ScreenshotResult> {
   return captureChartScreenshot(chart, {
     viewport: { width: 1200, height: 750 },
     renderDelayMs: 5_000,
@@ -107,7 +123,7 @@ async function captureChart(
     await page.waitForTimeout(options.renderDelayMs ?? CHART_RENDER_DELAY);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `${chart.symbol.replace(/[:/]/g, "_")}_${timestamp}.jpg`;
+    const filename = `${chart.symbol.replace(/[:/]/g, "_")}_${chart.timeframe}_${timestamp}.jpg`;
     const filepath = join(SCREENSHOT_DIR, filename);
 
     const buffer = await page.screenshot({

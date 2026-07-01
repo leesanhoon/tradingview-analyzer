@@ -5,7 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import { analyzeAllCharts, buildVerificationPrompt, verifySetupWithGeminiModel } from "./analyzer.js";
 import { extractTextFromClaudeResponse, getClaudeClient } from "../shared/claude.js";
 import { withRetry } from "../shared/retry.js";
-import type { ChartConfig, ScreenshotResult, TradeSetup } from "../shared/types.js";
+import type { ChartConfig, ScreenshotResult, TradeSetup } from "./chart-types.js";
 import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
 import { recordClaudeUsage } from "../shared/ai-usage.js";
@@ -98,11 +98,13 @@ async function readFixtures(): Promise<ScreenshotResult[]> {
     const filepath = join(TEST_DIR, file);
     const buffer = await readFile(filepath);
     const name = file.replace(extname(file), "").replace(/[-_]/g, " ");
+    const timeframe = /\bD1\b/i.test(name) ? "D1" : /\bM15\b/i.test(name) ? "M15" : "H4";
     const chart: ChartConfig = {
       name,
       symbol: name,
-      interval: "240",
+      interval: timeframe === "D1" ? "D" : timeframe === "M15" ? "15" : "240",
       description: `Fixture - ${name}`,
+      timeframe,
     };
     screenshots.push({ chart, buffer: Buffer.from(buffer), filepath });
   }
@@ -228,5 +230,6 @@ main().catch((error) => {
   logger.error("Error:", error);
   process.exit(1);
 });
+
 
 

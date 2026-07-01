@@ -11,14 +11,14 @@ function formatCheckedAt(): string {
 }
 
 async function processPosition(position: Awaited<ReturnType<typeof loadOpenPositions>>[number]): Promise<void> {
-  const chart = findChartForPair(position.pair);
+  const chart = findChartForPair(position.pair, "H4");
   if (!chart) {
     logger.warn("No chart configuration found", { pair: position.pair });
     return;
   }
 
   const screenshot = await captureVerificationChartScreenshot(chart);
-  await sendPhoto(screenshot.buffer, `📊 ${position.pair} - kiểm tra vị thế`);
+  await sendPhoto(screenshot.buffer, `📊 ${position.pair} - kiểm tra vị thế (${chart.timeframe})`);
 
   const decision = await decidePosition(position, screenshot);
   const { patch, closePosition: shouldClose } = buildPositionManagementPatch(position, decision);
@@ -77,5 +77,3 @@ export async function runCheckOpenTrades(): Promise<void> {
 
   logger.info("Check open trades complete");
 }
-
-

@@ -1,5 +1,4 @@
 import { GoogleGenAI } from "@google/genai";
-import type { ScreenshotResult } from "../shared/types.js";
 import { getClaudeClient, extractTextFromClaudeResponse } from "../shared/claude.js";
 import { withRetry } from "../shared/retry.js";
 import type { OpenPosition } from "./positions-repository.js";
@@ -8,6 +7,7 @@ import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
 import type { PositionDecisionOutcome } from "./position-engine.js";
 import { recordClaudeUsage, recordGeminiUsage } from "../shared/ai-usage.js";
+import type { ScreenshotResult } from "./chart-types.js";
 
 const logger = createLogger("charts:position-decision");
 const GEMINI_RATE_LIMIT = {

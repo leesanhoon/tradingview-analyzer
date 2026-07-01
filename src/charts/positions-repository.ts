@@ -1,6 +1,6 @@
 import { getDb } from "../shared/db.js";
 import { createLogger } from "../shared/logger.js";
-import type { TradeSetup } from "../shared/types.js";
+import type { TradeSetup } from "./chart-types.js";
 import {
   buildOpenPositionInsertRow,
   deriveManagementPatch,
