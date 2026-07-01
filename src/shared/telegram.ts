@@ -1,4 +1,9 @@
-import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "../charts/chart-types.js";
+import type {
+  AnalysisResult,
+  TradeSetup,
+  PairSummary,
+  ScreenshotResult,
+} from "../charts/chart-types.js";
 import type { Notifier } from "./notifier.js";
 import { createLogger } from "./logger.js";
 import type { PerformanceReport } from "../charts/performance-tracking.js";
@@ -17,12 +22,18 @@ function getTelegramConfig() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
-    throw new Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables are required");
+    throw new Error(
+      "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID environment variables are required",
+    );
   }
   return { token, chatId, api: `https://api.telegram.org/bot${token}` };
 }
 
-async function postTelegramApi(path: string, payload: Record<string, unknown>, errorPrefix: string): Promise<void> {
+async function postTelegramApi(
+  path: string,
+  payload: Record<string, unknown>,
+  errorPrefix: string,
+): Promise<void> {
   const { api } = getTelegramConfig();
   const response = await fetch(`${api}/${path}`, {
     method: "POST",
@@ -36,11 +47,18 @@ async function postTelegramApi(path: string, payload: Record<string, unknown>, e
   }
 }
 
-export async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<void> {
+export async function sendPhoto(
+  photoBuffer: Buffer,
+  caption: string,
+): Promise<void> {
   const { chatId, api } = getTelegramConfig();
   const formData = new FormData();
   formData.append("chat_id", chatId);
-  formData.append("photo", new Blob([new Uint8Array(photoBuffer)], { type: "image/png" }), "chart.png");
+  formData.append(
+    "photo",
+    new Blob([new Uint8Array(photoBuffer)], { type: "image/png" }),
+    "chart.png",
+  );
   formData.append("caption", caption.slice(0, 1024));
 
   const response = await fetch(`${api}/sendPhoto`, {
@@ -54,11 +72,19 @@ export async function sendPhoto(photoBuffer: Buffer, caption: string): Promise<v
   }
 }
 
-export async function sendDocument(fileBuffer: Buffer, filename: string, caption: string): Promise<void> {
+export async function sendDocument(
+  fileBuffer: Buffer,
+  filename: string,
+  caption: string,
+): Promise<void> {
   const { chatId, api } = getTelegramConfig();
   const formData = new FormData();
   formData.append("chat_id", chatId);
-  formData.append("document", new Blob([new Uint8Array(fileBuffer)], { type: "application/json" }), filename);
+  formData.append(
+    "document",
+    new Blob([new Uint8Array(fileBuffer)], { type: "application/json" }),
+    filename,
+  );
   formData.append("caption", caption.slice(0, 1024));
 
   const response = await fetch(`${api}/sendDocument`, {
@@ -72,24 +98,42 @@ export async function sendDocument(fileBuffer: Buffer, filename: string, caption
   }
 }
 
-export async function setMyCommands(commands: TelegramCommand[]): Promise<void> {
-  await postTelegramApi("setMyCommands", { commands }, "Telegram setMyCommands");
+export async function setMyCommands(
+  commands: TelegramCommand[],
+): Promise<void> {
+  await postTelegramApi(
+    "setMyCommands",
+    { commands },
+    "Telegram setMyCommands",
+  );
 }
 
 export async function setChatMenuButton(): Promise<void> {
-  await postTelegramApi("setChatMenuButton", { menu_button: { type: "commands" } }, "Telegram setChatMenuButton");
+  await postTelegramApi(
+    "setChatMenuButton",
+    { menu_button: { type: "commands" } },
+    "Telegram setChatMenuButton",
+  );
 }
 
-export async function notifyError(scope: string, error: unknown): Promise<void> {
+export async function notifyError(
+  scope: string,
+  error: unknown,
+): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   try {
-    await sendMessage(`🔴 *Lỗi: ${scope}*\n\n\`\`\`\n${message.slice(0, 3500)}\n\`\`\``);
+    await sendMessage(
+      `🔴 *Lỗi: ${scope}*\n\n\`\`\`\n${message.slice(0, 3500)}\n\`\`\``,
+    );
   } catch (notifyErr) {
     logger.error("Failed to send error notification to Telegram:", notifyErr);
   }
 }
 
-export async function sendMessage(text: string, replyMarkup?: InlineKeyboardMarkup): Promise<void> {
+export async function sendMessage(
+  text: string,
+  replyMarkup?: InlineKeyboardMarkup,
+): Promise<void> {
   const { chatId, api } = getTelegramConfig();
   const response = await fetch(`${api}/sendMessage`, {
     method: "POST",
@@ -146,10 +190,7 @@ async function editMessageReplyMarkup(
 }
 
 function buildSummaryTable(summaries: PairSummary[]): string {
-  const lines: string[] = [
-    "📊 *TỔNG QUAN TẤT CẢ CẶP TIỀN*",
-    "",
-  ];
+  const lines: string[] = ["📊 *TỔNG QUAN TẤT CẢ CẶP TIỀN*", ""];
 
   for (const s of summaries) {
     const icon = s.confidence >= 70 ? "🟢" : s.confidence >= 40 ? "🟡" : "🔴";
@@ -191,7 +232,8 @@ function getPatternInfo(setup: string): string {
 function buildCopyableSetup(setup: TradeSetup): string {
   const arrow = setup.direction === "LONG" ? "🟢" : "🔴";
   const confidence = setup.confidence ?? 0;
-  const confBar = confidence >= 80 ? "🟢🟢🟢" : confidence >= 70 ? "🟡🟡" : "🔴";
+  const confBar =
+    confidence >= 80 ? "🟢🟢🟢" : confidence >= 70 ? "🟡🟡" : "🔴";
   const emaTag = setup.emaTouch ? " 📍EMA" : "";
   const patternInfo = getPatternInfo(setup.setup);
   return [
@@ -217,13 +259,18 @@ function buildCopyableSetup(setup: TradeSetup): string {
     `💡 ${setup.summary}`,
     "",
     buildConfirmationLine(setup),
-    setup.autoTracked === true ? "✅ Bot đã tự động lưu vị thế và sẽ tiếp tục theo dõi để báo khi cần đóng." : "",
+    setup.autoTracked === true
+      ? "✅ Bot đã tự động lưu vị thế và sẽ tiếp tục theo dõi để báo khi cần đóng."
+      : "",
   ].join("\n");
 }
 
 function buildConfirmationLine(setup: TradeSetup): string {
   if (setup.verifiedConfirmed === true) {
-    const verifiedBy = setup.verifiedBy === "claude-sonnet-4-6" ? "Claude Sonnet 4.6" : "Gemini 2.5 Pro";
+    const verifiedBy =
+      setup.verifiedBy === "claude-sonnet-4-6"
+        ? "Claude Sonnet 4.6"
+        : "Gemini 2.5 Pro";
     return `✅ *Đã xác nhận bởi ${verifiedBy}* (${setup.verifiedConfidence}%)${setup.verifiedComment ? ` — ${setup.verifiedComment}` : ""}`;
   }
   return `⚠️ _Chưa xác nhận bởi Gemini 2.5 Pro (lỗi xác minh, fallback Claude Sonnet 4.6)_`;
@@ -252,14 +299,24 @@ export function buildPositionDecisionMessage(
     decision: "HOLD" | "CLOSE" | "STOP";
     confidence: number;
     comment: string;
-    managementAction?: "NONE" | "PARTIAL_TP1" | "MOVE_SL_TO_BE" | "TRAIL_SL" | "TP2_CLOSE";
+    managementAction?:
+      | "NONE"
+      | "PARTIAL_TP1"
+      | "MOVE_SL_TO_BE"
+      | "TRAIL_SL"
+      | "TP2_CLOSE";
     partialClosePercent?: number;
     newStopLoss?: string | null;
     tp1Reached?: boolean;
     tp2Reached?: boolean;
   },
 ): string {
-  const emoji = decision.decision === "HOLD" ? "🟢" : decision.decision === "CLOSE" ? "🟡" : "🔴";
+  const emoji =
+    decision.decision === "HOLD"
+      ? "🟢"
+      : decision.decision === "CLOSE"
+        ? "🟡"
+        : "🔴";
   const actionLine =
     decision.decision === "HOLD"
       ? "🟢 Tiếp tục giữ lệnh."
@@ -287,22 +344,31 @@ export function buildPositionDecisionMessage(
     `TP1: ${position.takeProfit1}`,
     position.takeProfit2 ? `TP2: ${position.takeProfit2}` : "",
     position.tradeStage ? `*Trạng thái:* ${position.tradeStage}` : "",
-    position.tp1ClosedPercent !== undefined && position.tp1ClosedPercent !== null
+    position.tp1ClosedPercent !== undefined &&
+    position.tp1ClosedPercent !== null
       ? `*TP1 đã đóng:* ${position.tp1ClosedPercent}%`
       : "",
-    position.trailingStopLoss ? `*Trailing SL:* ${position.trailingStopLoss}` : "",
+    position.trailingStopLoss
+      ? `*Trailing SL:* ${position.trailingStopLoss}`
+      : "",
     "",
     `*Nhận định:* ${decision.comment || "Không có nhận xét chi tiết."}`,
   ].filter(Boolean);
 
   if (position.reasons && position.reasons.length > 0) {
-    lines.push("", "*Lý do gốc:*", ...position.reasons.map((reason) => `• ${reason}`));
+    lines.push(
+      "",
+      "*Lý do gốc:*",
+      ...position.reasons.map((reason) => `• ${reason}`),
+    );
   }
 
   return lines.join("\n");
 }
 
-export function buildPerformanceReportMessage(report: PerformanceReport): string {
+export function buildPerformanceReportMessage(
+  report: PerformanceReport,
+): string {
   const lines: string[] = [
     `📈 *Báo cáo hiệu suất ${report.periodLabel}*`,
     `*Kỳ:* ${report.startAt} -> ${report.endAt}`,
@@ -329,12 +395,18 @@ export function buildPerformanceReportMessage(report: PerformanceReport): string
   return lines.join("\n");
 }
 
-function findScreenshot(pair: string, screenshots: ScreenshotResult[]): ScreenshotResult | undefined {
+function findScreenshot(
+  pair: string,
+  screenshots: ScreenshotResult[],
+): ScreenshotResult | undefined {
   const normalized = pair.replace("/", "").toUpperCase();
   return (
     screenshots.find(
-      (s) => s.chart.symbol.toUpperCase().includes(normalized) && s.chart.timeframe === "H4",
-    ) ?? screenshots.find((s) => s.chart.symbol.toUpperCase().includes(normalized))
+      (s) =>
+        s.chart.symbol.toUpperCase().includes(normalized) &&
+        s.chart.timeframe === "H4",
+    ) ??
+    screenshots.find((s) => s.chart.symbol.toUpperCase().includes(normalized))
   );
 }
 
@@ -357,10 +429,19 @@ export async function sendAllAnalyses(
     return;
   }
 
-  const geminiHighConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
-  const rejectedByVerified = geminiHighConfSetups.filter((s) => s.verifiedConfirmed === false);
-  const highConfSetups = geminiHighConfSetups.filter((s) => s.verifiedConfirmed !== false);
-  const headerSuffix = geminiHighConfSetups.length > 0 ? " (>80%, đã đối chiếu Gemini 2.5 Pro -> Claude Sonnet 4.6)" : " (>80%)";
+  const geminiHighConfSetups = result.setups.filter(
+    (s) => (s.confidence ?? 0) > 70,
+  );
+  const rejectedByVerified = geminiHighConfSetups.filter(
+    (s) => s.verifiedConfirmed === false,
+  );
+  const highConfSetups = geminiHighConfSetups.filter(
+    (s) => s.verifiedConfirmed !== false,
+  );
+  const headerSuffix =
+    geminiHighConfSetups.length > 0
+      ? " (>80%, đã đối chiếu Gemini 2.5 Pro -> Claude Sonnet 4.6)"
+      : " (>80%)";
 
   // Header
   await notifier.sendMessage(
@@ -370,8 +451,8 @@ export async function sendAllAnalyses(
   if (highConfSetups.length === 0) {
     const reason =
       geminiHighConfSetups.length === 0
-        ? `Không tìm thấy setup nào > 80% (chỉ có ${result.setups.length} setup ở mức >=70%).`
-        : `Tìm thấy ${geminiHighConfSetups.length} setup > 80%, nhưng Gemini 2.5 Pro -> Claude Sonnet 4.6 đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
+        ? `Không tìm thấy setup nào > 70% (chỉ có ${result.setups.length} setup ở mức >=70%).`
+        : `Tìm thấy ${geminiHighConfSetups.length} setup > 70%, nhưng Gemini 2.5 Pro -> Claude Sonnet 4.6 đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
     await notifier.sendMessage(
       `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
@@ -387,7 +468,9 @@ export async function sendAllAnalyses(
       try {
         const caption = `📊 ${setup.pair} H4 — ${setup.direction} (${confidence}% 🔥)`;
         await notifier.sendPhoto(screenshot.buffer, caption);
-        logger.info(`  ✓ Sent chart: ${setup.pair} (confidence ${confidence}%)`);
+        logger.info(
+          `  ✓ Sent chart: ${setup.pair} (confidence ${confidence}%)`,
+        );
       } catch (error) {
         logger.error(`  ✗ Failed to send chart ${setup.pair}:`, error);
       }
@@ -398,6 +481,7 @@ export async function sendAllAnalyses(
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 
-  await notifier.sendMessage(`✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 80%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`);
+  await notifier.sendMessage(
+    `✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 70%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`,
+  );
 }
-

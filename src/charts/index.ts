@@ -13,7 +13,10 @@ async function main(): Promise<void> {
   const startTime = Date.now();
   logger.info("Bob Volman multi-timeframe scanner starting");
 
-  logger.info("Capturing all forex charts", { intervals: ["D1", "H4", "M15"], indicators: ["EMA 20", "volume"] });
+  logger.info("Capturing all forex charts", {
+    intervals: ["D1", "H4", "M15"],
+    indicators: ["EMA 20", "volume"],
+  });
   const screenshots = await captureAllCharts();
 
   if (screenshots.length === 0) {
@@ -25,14 +28,17 @@ async function main(): Promise<void> {
   const result = await analyzeAllCharts(screenshots);
   logger.info("Analysis complete");
 
-  const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 80);
+  const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > 70);
   if (highConfSetups.length > 0) {
     logger.info("Verifying high-confidence setups", {
       count: highConfSetups.length,
       primaryModel: "gemini-2.5-pro",
       fallbackModel: "claude-sonnet-4-6",
     });
-    const verified = await confirmHighConfidenceSetups(highConfSetups, screenshots);
+    const verified = await confirmHighConfidenceSetups(
+      highConfSetups,
+      screenshots,
+    );
     const verifiedByPair = new Map(verified.map((s) => [s.pair, s]));
     result.setups = result.setups.map((s) => verifiedByPair.get(s.pair) ?? s);
     logger.info("Verification complete");
@@ -58,7 +64,10 @@ async function main(): Promise<void> {
           logger.info("Skipped duplicate open position", { pair: setup.pair });
         }
       } catch (error) {
-        logger.error("Failed to auto-save open position", { pair: setup.pair, error });
+        logger.error("Failed to auto-save open position", {
+          pair: setup.pair,
+          error,
+        });
       }
     }
   }
@@ -70,7 +79,10 @@ async function main(): Promise<void> {
   await runCheckOpenTrades();
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-  logger.info("Run complete", { scannedPairs: screenshots.length, elapsedSeconds: Number(elapsed) });
+  logger.info("Run complete", {
+    scannedPairs: screenshots.length,
+    elapsedSeconds: Number(elapsed),
+  });
 }
 
 main().catch(async (error) => {
