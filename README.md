@@ -1,146 +1,236 @@
 # Auto Signal Bot
 
-Tự động chụp chart TradingView → phân tích bằng Gemini AI → gửi kết quả qua Telegram.
+Bot tự động quét tín hiệu từ nhiều nguồn, ưu tiên cho luồng trading chart:
 
-Chạy miễn phí trên GitHub Actions mỗi 4 giờ.
+- Chụp chart TradingView đa khung thời gian
+- Phân tích bằng Gemini hoặc Claude
+- Xác minh setup confidence cao
+- Tự động lưu vị thế mở, theo dõi vị thế đang chạy
+- Gửi kết quả, thống kê và cảnh báo qua Telegram
 
-## Stack
+Ngoài luồng chart, repo còn có các runner cho betting, lottery, backtesting, performance tracking và observability.
 
-- **Node.js + TypeScript** — runtime & language
-- **Playwright** — headless browser chụp chart
-- **Google Gemini** — AI phân tích chart (free tier)
-- **Gemini 3.5 Flash** — xác minh chéo các setup confidence cao
-- **Telegram Bot** — gửi kết quả + báo lỗi
-- **GitHub Actions** — scheduler miễn phí
+## Tính Năng Đã Triển Khai
 
-## Setup
+### 1. Phân Tích Chart Đa Khung Thời Gian
 
-### 1. Tạo API keys (miễn phí)
+- Chụp cùng lúc 3 timeframe cho mỗi cặp: `D1`, `H4`, `M15`
+- Phân tích multi-timeframe confluence thay vì chỉ nhìn một khung
+- Bật volume trên chart để model đọc được tương quan giá và khối lượng
+- Gắn nhãn rõ từng ảnh theo `PAIR` và `TIMEFRAME`
+- Có bước xác minh setup confidence cao bằng model khác trước khi auto-save vị thế
 
-- **Gemini**: [Google AI Studio](https://aistudio.google.com/apikey) → Create API Key
-- **Gemini Pro**: [Google AI Studio](https://aistudio.google.com/apikey) → API key dùng cho bước xác minh chéo setup confidence cao
+### 2. Quản Lý Vị Thế
 
-### 2. Tạo Telegram Bot
+- Tự động lưu các setup được xác nhận thành `open_positions`
+- Có decision engine để đọc chart và ra quyết định `HOLD`, `CLOSE`, hoặc `STOP`
+- Hỗ trợ theo dõi mở lệnh, TP1 partial close, trailing stop, đóng lệnh
+- Có runner kiểm tra lại các vị thế đang mở trên chart H4
 
-1. Mở Telegram, tìm [@BotFather](https://t.me/BotFather)
-2. Gửi `/newbot` → đặt tên → nhận **Bot Token**
-3. Mở bot vừa tạo, gửi tin nhắn bất kỳ để bot có thể trả về menu điều khiển
-4. Lấy Chat ID:
-   ```
-   curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
-   ```
-   Chat ID nằm trong `result[0].message.chat.id`
+### 3. Stats Và Performance
 
-### 3. Deploy lên GitHub
+- Lệnh Telegram `/stats` hiển thị:
+  - số vị thế đang mở
+  - win-rate gần đây
+  - usage AI trong ngày
+- Có báo cáo hiệu suất định kỳ:
+  - win-rate
+  - R:R thực tế
+  - drawdown
+  - tổng hợp theo cặp
+- Có lưu và tổng hợp dữ liệu đóng lệnh để phục vụ phân tích sau này
 
-1. Push repo này lên GitHub
-2. Vào **Settings → Secrets and variables → Actions** (environment `production`)
-3. Thêm các secrets:
-   - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`
-   - `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`
+### 4. Observability Và An Toàn Vận Hành
 
-### 4. Điều khiển workflow qua Telegram với Supabase Edge Function
+- Structured logging
+- Telegram webhook idempotency để tránh xử lý trùng update
+- Rate limiting chủ động cho lời gọi AI
+- Theo dõi token/cost cho Gemini và Claude
+- Cảnh báo khi usage gần chạm ngưỡng cấu hình
 
-Bot hiện tại vẫn gửi kết quả qua Telegram như cũ. Để nhận lệnh ngược lại từ Telegram và trigger `workflow_dispatch`, bạn cần tạo một Edge Function làm webhook.
+### 5. Telegram Workflow
 
-1. Cài Supabase CLI theo [hướng dẫn chính thức](https://supabase.com/docs/guides/local-development/cli/getting-started), đăng nhập và liên kết repo với project:
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref <project-ref>
-   ```
-2. Thiết lập secrets cho function:
-   ```bash
-   npx supabase secrets set TELEGRAM_BOT_TOKEN=...
-   npx supabase secrets set TELEGRAM_CHAT_ID=...
-   npx supabase secrets set TELEGRAM_WEBHOOK_SECRET=...
-   npx supabase secrets set GITHUB_PAT=...
-   npx supabase secrets set GITHUB_OWNER=...
-   npx supabase secrets set GITHUB_REPO=...
-   npx supabase secrets set GITHUB_REF=main
-   ```
-3. `GITHUB_PAT` nên là fine-grained PAT và chỉ cấp quyền `Actions: write` cho đúng repo này.
-4. Deploy function. Cấu hình `verify_jwt = false` trong `supabase/config.toml` cho phép Telegram gọi webhook mà không cần Supabase JWT:
-   ```bash
-   npx supabase functions deploy telegram-webhook
-   ```
-5. Đăng ký webhook với Telegram:
-   ```bash
-   curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<project-ref>.functions.supabase.co/telegram-webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
-   ```
-6. Gửi bất kỳ tin nhắn nào trong Telegram để mở menu nút bấm và kiểm tra webhook đã hoạt động.
+- Có Telegram menu để trigger workflow GitHub Actions
+- Webhook Supabase nhận lệnh và dispatch workflow
+- Cấu hình xác thực bằng `X-Telegram-Bot-Api-Secret-Token`
+- Chỉ cho phép chat ID đã khai báo
 
-Function nằm tại [`supabase/functions/telegram-webhook/index.ts`](supabase/functions/telegram-webhook/index.ts).
+### 6. Betting Và Lottery
 
-### 5. Chạy thử
+- Có runner riêng cho quét kèo bóng đá
+- Có pipeline cho lottery scan, predict, verify, backfill và backtest
 
-- Vào tab **Actions** → chọn workflow (`TradingView Chart Analysis`) → **Run workflow**
-- Hoặc đợi đến giờ chạy tự động (mỗi 4h)
+## Kiến Trúc Tổng Quan
 
-Sau khi deploy webhook, luồng dùng Telegram là:
+- **Node.js + TypeScript**: runtime chính
+- **Playwright**: chụp chart TradingView
+- **Gemini / Claude**: phân tích chart và xác minh setup
+- **Telegram Bot**: nhận lệnh, gửi kết quả, gửi cảnh báo
+- **Supabase**: lưu logs, idempotency, AI usage, performance tracking
+- **GitHub Actions**: chạy định kỳ và dispatch workflow từ Telegram
 
-- Gửi bất kỳ tin nhắn nào để bot trả về menu chính
-- Bấm `📊 Phân tích chart` để trigger ngay
-- Bấm submenu `✅ Xác minh kết quả ▸` để chọn miền và trigger `lottery-verify.yml`
+## Cấu Trúc Chính
 
-Webhook chỉ chấp nhận message từ `TELEGRAM_CHAT_ID` đã cấu hình và kiểm tra thêm header `X-Telegram-Bot-Api-Secret-Token`.
+- `src/charts`: luồng phân tích chart, quyết định vị thế, backtest, performance report
+- `src/betting`: luồng quét và backtest kèo bóng đá
+- `src/lottery`: luồng quét, dự đoán, verify và backtest xổ số
+- `src/shared`: helper chung cho Telegram, logging, DB, stats, AI usage, rate limit
+- `supabase/functions/telegram-webhook`: webhook nhận Telegram update và kích hoạt workflow
 
-## Tùy chỉnh chart
+## Yêu Cầu
 
-Sửa file `src/charts.config.ts` để thêm/bớt chart:
+- Node.js 20+ khuyến nghị
+- npm
+- Playwright Chromium
+- Tài khoản Gemini API
+- Tài khoản Anthropic API nếu muốn dùng Claude fallback/verify
+- Telegram bot token
+- Supabase project cho webhook, logs và metrics
+- GitHub PAT có quyền `Actions: write`
 
-```typescript
-export const CHARTS: ChartConfig[] = [
-  {
-    name: "BTC/USDT 4H",
-    symbol: "BINANCE:BTCUSDT",     // TradingView symbol
-    interval: "240",                // 1, 5, 15, 60, 240, D, W
-    description: "Bitcoin 4-hour",
-  },
-  // Thêm chart khác tại đây...
-];
-```
+## Cài Đặt Nhanh
 
-### Interval phổ biến
-
-| Giá trị | Timeframe |
-|---------|-----------|
-| `1`     | 1 phút    |
-| `5`     | 5 phút    |
-| `15`    | 15 phút   |
-| `60`    | 1 giờ     |
-| `240`   | 4 giờ     |
-| `D`     | 1 ngày    |
-| `W`     | 1 tuần    |
-
-## Chạy local
+### 1. Cài dependency
 
 ```bash
-# Install dependencies
 npm install
 npx playwright install chromium
+```
 
-# Set environment variables
-cp .env.example .env
-# Sửa .env với API keys thật
+### 2. Tạo file `.env`
 
-# Chạy
+Sao chép từ `.env.example` rồi điền giá trị thật.
+
+Các biến chính:
+
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `VERIFY_PROVIDER`
+- `ANTHROPIC_API_KEY`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_WEBHOOK_SECRET`
+- `SUPABASE_URL`
+- `SUPABASE_KEY`
+- `GITHUB_OWNER`
+- `GITHUB_REPO`
+- `GITHUB_PAT`
+- `GITHUB_REF`
+- `API_FOOTBALL_KEY`
+- `API_FOOTBALL_BOOKMAKER`
+- `API_FOOTBALL_LEAGUE`
+
+### 3. Cấu hình Telegram bot
+
+1. Tạo bot với [@BotFather](https://t.me/BotFather)
+2. Lấy `TELEGRAM_BOT_TOKEN`
+3. Gửi một tin nhắn bất kỳ vào bot để lấy `chat_id`
+4. Chạy menu setup:
+
+```bash
+npm run setup:telegram-menu
+```
+
+### 4. Cấu hình Supabase webhook
+
+Project có Edge Function tại [`supabase/functions/telegram-webhook/index.ts`](supabase/functions/telegram-webhook/index.ts).
+
+Trong [`supabase/config.toml`](supabase/config.toml), webhook được set `verify_jwt = false` để Telegram có thể gọi trực tiếp.
+
+Thiết lập secret cho function:
+
+```bash
+npx supabase secrets set TELEGRAM_BOT_TOKEN=...
+npx supabase secrets set TELEGRAM_CHAT_ID=...
+npx supabase secrets set TELEGRAM_WEBHOOK_SECRET=...
+npx supabase secrets set GITHUB_PAT=...
+npx supabase secrets set GITHUB_OWNER=...
+npx supabase secrets set GITHUB_REPO=...
+npx supabase secrets set GITHUB_REF=main
+```
+
+Deploy function:
+
+```bash
+npx supabase functions deploy telegram-webhook
+```
+
+Đăng ký webhook với Telegram:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://<project-ref>.functions.supabase.co/telegram-webhook&secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+
+## Chạy Hệ Thống
+
+### Phân tích chart
+
+```bash
 npm run analyze
 ```
 
-## Chi phí
+Luồng này sẽ:
 
-| Service         | Free Tier                        |
-|-----------------|----------------------------------|
-| GitHub Actions  | 2000 mins/tháng (private repo)   |
-| Gemini API      | 15 RPM, 1M tokens/ngày           |
-| Telegram Bot    | Không giới hạn                   |
-| **Tổng**        | **$0/tháng**                     |
+1. Chụp chart theo cấu hình
+2. Gửi toàn bộ ảnh vào AI để phân tích
+3. Xác minh các setup confidence cao
+4. Lưu vị thế đủ điều kiện
+5. Gửi kết quả qua Telegram
+6. Kiểm tra lại các vị thế đang mở
 
-Mỗi lần chạy ~2-3 phút → 6 lần/ngày × 3 phút = ~18 phút/ngày → ~540 phút/tháng ✓
+### Báo cáo hiệu suất
 
-## Lưu ý
+```bash
+npm run performance-report
+```
 
-- Chart sử dụng TradingView widget URL (public) — không cần tài khoản TradingView
-- Indicators mặc định: MA, RSI, MACD — có thể tùy chỉnh trong `charts.config.ts`
-- Gemini free tier có rate limit — nếu nhiều chart, tăng delay giữa các request
-- **Phân tích chỉ mang tính tham khảo, không phải lời khuyên đầu tư**
+### Backtest
+
+```bash
+npm run forex-backtest
+npm run betting-backtest
+npm run lottery-backtest
+```
+
+### Test / debug
+
+```bash
+npm test
+npm run test-analyze
+npm run test-model-compare
+```
+
+## Telegram Commands
+
+- `/help` - mở menu
+- `/stats` - xem thống kê hiện tại
+
+Menu nút bấm hiện có:
+
+- Phân tích chart
+- Quét kèo bóng đá
+- Quét kết quả xổ số
+- Dự đoán xổ số
+- Xác minh kết quả theo miền
+
+## Lưu Ý Khi Vận Hành
+
+- Gemini free tier có thể trả `503 UNAVAILABLE` khi quá tải, code đã có retry tự động
+- Phân tích đa khung thời gian làm tăng chi phí và thời gian chụp chart, nhưng đổi lại giảm false positive
+- Kết quả AI chỉ nên xem như hỗ trợ ra quyết định, không phải lời khuyên đầu tư
+- Với Supabase webhook, nên dùng service role key ở server-side, không dùng anon key
+
+## Free Tier / Chi Phí
+
+Mục tiêu của project là vận hành gần như miễn phí với free tier, nhưng chi phí thực tế còn phụ thuộc:
+
+- Số lần chạy mỗi ngày
+- Số chart cần chụp
+- Số lượt retry AI
+- Số token tiêu thụ khi xác minh setup và thống kê
+
+## Tài Liệu Liên Quan
+
+- [Roadmap tổng quan](docs/tasks/00-overview.md)
+- [Phase 09 - /stats](docs/tasks/09-stats-command.md)
+- [Phase 10 - mở rộng tính năng](docs/tasks/10-feature-expansion.md)
