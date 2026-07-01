@@ -11,7 +11,7 @@ Nguồn: [docs/plan-for-app.md](../plan-for-app.md). Mỗi phase dưới đây l
 | 05 | [Position decision engine](05-position-decision-engine.md) | Trung bình | done |
 | 06 | [Performance tracking](06-performance-tracking.md) | Trung bình | done |
 | 07 | [Backtesting](07-backtesting.md) | Trung bình | in-progress |
-| 08 | [Cost & observability](08-cost-observability.md) | Trung bình | todo |
+| 08 | [Cost & observability](08-cost-observability.md) | Trung bình | done |
 | 09 | [Lệnh /stats](09-stats-command.md) | Trung bình | todo |
 | 10 | [Mở rộng tính năng](10-feature-expansion.md) | Thấp | todo |
 

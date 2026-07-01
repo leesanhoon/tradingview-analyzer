@@ -4,6 +4,7 @@ import { withConfiguredRateLimit } from "../shared/rate-limit.js";
 import type { MatchAiAnalysis, MatchOddsPayload } from "./betting-types.js";
 import { formatOddsAnalysisInput } from "./odds-text-format.js";
 import { createLogger } from "../shared/logger.js";
+import { recordGeminiUsage } from "../shared/ai-usage.js";
 
 const logger = createLogger("betting:betting-gemini");
 const DEFAULT_MODEL = "gemini-2.5-flash";
@@ -242,6 +243,11 @@ export async function analyzeMatchOdds(payload: MatchOddsPayload): Promise<Match
     },
   });
 
+  void recordGeminiUsage(response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }, {
+    model,
+    source: "betting",
+  });
+
   const parsed = parseMatchAnalysisResponse(response.text ?? "", payload);
   if (!parsed) {
     throw new Error(`Gemini parse failed. Raw: ${(response.text ?? "").slice(0, 300)}`);
@@ -298,6 +304,14 @@ export async function verifyMatchAnalysis(
       },
     });
 
+    void recordGeminiUsage(
+      response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } },
+      {
+        model,
+        source: "betting",
+      },
+    );
+
     const parsed = parseVerificationResponse(response.text ?? "");
     if (!parsed) {
       throw new Error(`Gemini verify parse failed for model ${model}. Raw: ${(response.text ?? "").slice(0, 300)}`);
@@ -307,14 +321,16 @@ export async function verifyMatchAnalysis(
   };
 
   try {
-    return await callVerifyModel(VERIFY_MODEL_PRIMARY);
+    const result = await callVerifyModel(VERIFY_MODEL_PRIMARY);
+    return result;
   } catch (primaryError) {
     logger.warn(
       `  ! Gemini match verify failed with ${VERIFY_MODEL_PRIMARY} for ${payload.home} vs ${payload.away}, falling back to ${VERIFY_MODEL_FALLBACK}: ${
         primaryError instanceof Error ? primaryError.message : primaryError
       }`,
     );
-    return await callVerifyModel(VERIFY_MODEL_FALLBACK);
+    const result = await callVerifyModel(VERIFY_MODEL_FALLBACK);
+    return result;
   }
 }
 
@@ -356,6 +372,11 @@ export async function reviseMatchAnalysis(
         }`,
       );
     },
+  });
+
+  void recordGeminiUsage(response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }, {
+    model: VERIFY_MODEL_FALLBACK,
+    source: "betting",
   });
 
   const parsed = parseMatchAnalysisResponse(response.text ?? "", payload);

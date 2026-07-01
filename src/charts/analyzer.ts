@@ -5,6 +5,7 @@ import { withRetry } from "../shared/retry.js";
 import { captureVerificationChartScreenshot, findChartForPair } from "./screenshot.js";
 import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
+import { recordClaudeUsage, recordGeminiUsage } from "../shared/ai-usage.js";
 
 const logger = createLogger("charts:analyzer");
 const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
@@ -182,6 +183,14 @@ async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<strin
     },
   });
 
+  void recordGeminiUsage(
+    result as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } },
+    {
+      model: ANALYSIS_MODEL,
+      source: "chart",
+    },
+  );
+
   return result.text ?? "";
 }
 
@@ -225,6 +234,11 @@ async function verifySetupWithClaude(
         }`,
       );
     },
+  });
+
+  void recordClaudeUsage(result as { usage?: { input_tokens?: number; output_tokens?: number } }, {
+    model: "claude-sonnet-4-6",
+    source: "chart",
   });
 
   const cleaned = extractJsonObject(
@@ -278,6 +292,14 @@ export async function verifySetupWithGeminiModel(
       );
     },
   });
+
+  void recordGeminiUsage(
+    result as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } },
+    {
+      model,
+      source: "chart",
+    },
+  );
 
   const parsed = parseVerificationResponse(result.text ?? "");
   if (!parsed) {

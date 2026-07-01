@@ -8,6 +8,7 @@ import { withRetry } from "../shared/retry.js";
 import type { ChartConfig, ScreenshotResult, TradeSetup } from "../shared/types.js";
 import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
+import { recordClaudeUsage } from "../shared/ai-usage.js";
 
 const logger = createLogger("charts:test-model-compare");
 const TEST_DIR = join(process.cwd(), "test-charts");
@@ -145,6 +146,11 @@ async function verifyWithClaude(setup: TradeSetup, imageBuffer: Buffer): Promise
         }`,
       );
     },
+  });
+
+  void recordClaudeUsage(response as { usage?: { input_tokens?: number; output_tokens?: number } }, {
+    model: "claude-sonnet-4-6",
+    source: "chart",
   });
 
   const rawText = extractTextFromClaudeResponse(response as { content?: Array<{ type: string; text?: string }> });

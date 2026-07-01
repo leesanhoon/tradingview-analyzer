@@ -7,6 +7,7 @@ import { getVerifyProvider } from "./verify-provider.js";
 import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
 import type { PositionDecisionOutcome } from "./position-engine.js";
+import { recordClaudeUsage, recordGeminiUsage } from "../shared/ai-usage.js";
 
 const logger = createLogger("charts:position-decision");
 const GEMINI_RATE_LIMIT = {
@@ -169,6 +170,11 @@ Comment should be short and practical.`;
     },
   });
 
+  void recordClaudeUsage(response as { usage?: { input_tokens?: number; output_tokens?: number } }, {
+    model: "claude-sonnet-4-6",
+    source: "chart",
+  });
+
   const parsed = parseDecisionResponse(extractTextFromClaudeResponse(response as { content?: Array<{ type: string; text?: string }> }));
   if (!parsed) {
     throw new Error("Claude position decision parse failed");
@@ -233,6 +239,14 @@ Comment should be short and practical.`;
       );
     },
   });
+
+  void recordGeminiUsage(
+    response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } },
+    {
+      model,
+      source: "chart",
+    },
+  );
 
   const parsed = parseDecisionResponse(response.text ?? "");
   if (!parsed) {
