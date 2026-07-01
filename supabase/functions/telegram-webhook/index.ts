@@ -1,21 +1,12 @@
-type TelegramUpdate = {
-  message?: TelegramMessage;
-  callback_query?: TelegramCallbackQuery;
-};
-
-type TelegramMessage = {
-  message_id: number;
-  text?: string;
-  chat: {
-    id: number;
-  };
-};
-
-type TelegramCallbackQuery = {
-  id: string;
-  data?: string;
-  message?: TelegramMessage;
-};
+import { createClient } from "npm:@supabase/supabase-js@2.108.2";
+import { logger } from "../../../src/shared/logger.ts";
+import {
+  buildTelegramWebhookIdempotencyDescriptor,
+  shouldProcessTelegramWebhookUpdate,
+  type TelegramCallbackQuery,
+  type TelegramMessage,
+  type TelegramUpdate,
+} from "../../../src/shared/telegram-webhook-idempotency.ts";
 
 type WorkflowConfig = {
   file: string;
@@ -38,6 +29,10 @@ type CallbackAction =
   | { type: "run"; command: keyof typeof COMMANDS; args: string[] };
 
 const VERIFY_REGIONS = new Set(["mien-bac", "mien-trung", "mien-nam"]);
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_KEY = Deno.env.get("SUPABASE_KEY");
+
+let supabaseClient: ReturnType<typeof createClient> | null = null;
 
 const COMMANDS = {
   analyze: {
@@ -69,6 +64,23 @@ const COMMANDS = {
     },
   },
 } satisfies Record<string, WorkflowConfig>;
+
+function getSupabaseClient() {
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return null;
+  }
+
+  if (!supabaseClient) {
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
+  return supabaseClient;
+}
 
 function getEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -155,6 +167,56 @@ async function dispatchWorkflow(
     return JSON.parse(rawBody) as WorkflowDispatchResult;
   } catch {
     return null;
+  }
+}
+
+async function claimTelegramWebhookIdempotency(
+  idempotencyKey: string,
+  eventType: "message" | "callback",
+  payload: Record<string, unknown>,
+): Promise<boolean> {
+  const client = getSupabaseClient();
+  if (!client) {
+    logger.warn(
+      {
+        eventType,
+        idempotencyKey,
+      },
+      "Supabase env vars missing, skipping webhook idempotency check",
+    );
+    return true;
+  }
+
+  try {
+    const { data, error } = await client.rpc("claim_telegram_webhook_idempotency", {
+      p_idempotency_key: idempotencyKey,
+      p_event_type: eventType,
+      p_payload: payload,
+    });
+
+    if (error) {
+      logger.warn(
+        {
+          eventType,
+          idempotencyKey,
+          error,
+        },
+        "Failed to claim webhook idempotency; continuing with fail-open fallback",
+      );
+      return true;
+    }
+
+    return Boolean(data);
+  } catch (error) {
+    logger.warn(
+      {
+        eventType,
+        idempotencyKey,
+        error,
+      },
+      "Webhook idempotency RPC threw; continuing with fail-open fallback",
+    );
+    return true;
   }
 }
 
@@ -360,6 +422,21 @@ Deno.serve(async (request) => {
         return new Response("Forbidden", { status: 403 });
       }
 
+      const messageDescriptor = buildTelegramWebhookIdempotencyDescriptor(update);
+      const shouldProcessMessage = await shouldProcessTelegramWebhookUpdate(update, async ({ idempotencyKey, eventType, payload }) =>
+        claimTelegramWebhookIdempotency(idempotencyKey, eventType, payload)
+      );
+      if (!shouldProcessMessage) {
+        logger.info(
+          {
+            eventType: messageDescriptor?.eventType,
+            idempotencyKey: messageDescriptor?.idempotencyKey,
+          },
+          "Skipping duplicate Telegram webhook update",
+        );
+        return Response.json({ ok: true, ignored: "duplicate-message-update" });
+      }
+
       await showMenu(botToken, message.chat.id);
       return Response.json({ ok: true, menu: "main" });
     }
@@ -372,19 +449,34 @@ Deno.serve(async (request) => {
         return new Response("Forbidden", { status: 403 });
       }
 
+      const callbackDescriptor = buildTelegramWebhookIdempotencyDescriptor(update);
+      const shouldProcessCallback = await shouldProcessTelegramWebhookUpdate(update, async ({ idempotencyKey, eventType, payload }) =>
+        claimTelegramWebhookIdempotency(idempotencyKey, eventType, payload)
+      );
+      if (!shouldProcessCallback) {
+        logger.info(
+          {
+            eventType: callbackDescriptor?.eventType,
+            idempotencyKey: callbackDescriptor?.idempotencyKey,
+          },
+          "Skipping duplicate Telegram webhook update",
+        );
+        return Response.json({ ok: true, ignored: "duplicate-callback-query" });
+      }
+
       return handleTelegramCallback(botToken, callbackQuery, githubToken, githubOwner, githubRepo, githubRef);
     }
 
     return Response.json({ ok: true, ignored: "unsupported-update" });
   } catch (error) {
-    console.error(error);
+    logger.error(error);
 
     if (botToken && allowedChatId && messageChatId && String(messageChatId) === allowedChatId) {
       try {
         const messageText = error instanceof Error ? error.message : String(error);
         await sendTelegramMessage(botToken, messageChatId, `Không thể xử lý yêu cầu:\n${messageText}`);
       } catch (notifyError) {
-        console.error("Failed to send Telegram error message", notifyError);
+        logger.error("Failed to send Telegram error message", notifyError);
       }
     }
 

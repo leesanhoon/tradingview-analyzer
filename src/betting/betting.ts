@@ -23,11 +23,12 @@ export function extractMatches(raw: unknown): MatchInfo[] {
     });
 }
 
-/** Trong các trận CHƯA ĐÁ, lấy nhóm trận của ngày gần nhất sắp tới (ưu tiên hôm nay nếu còn trận). */
+/** Trong các trận CHƯA ĐÁ, lấy nhóm trận của ngày gần nhất sắp tới (ưu tiên hôm nay nếu còn trận). Lấy ít nhất 3 trận */
 export function pickNearestUpcomingDateMatches(matches: MatchInfo[]): MatchInfo[] {
   if (matches.length === 0) return [];
   const nearestDate = matches.slice().sort((a, b) => a.kickoffUnix - b.kickoffUnix)[0].date;
-  return matches.filter((m) => m.date === nearestDate);
+  const filteredMatches = matches.filter((m) => m.date === nearestDate);
+  return filteredMatches.length >= 3 ? filteredMatches : matches.slice(0, 3);
 }
 
 export type OddsFailure = { match: MatchInfo; message: string };
