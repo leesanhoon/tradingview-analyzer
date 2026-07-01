@@ -1,5 +1,6 @@
 import type { AnalysisResult, TradeSetup, PairSummary, ScreenshotResult } from "./types.js";
 import { createLogger } from "./logger.js";
+import type { PerformanceReport } from "../charts/performance-tracking.js";
 
 const logger = createLogger("shared:telegram");
 export type InlineKeyboardMarkup = {
@@ -295,6 +296,33 @@ export function buildPositionDecisionMessage(
 
   if (position.reasons && position.reasons.length > 0) {
     lines.push("", "*Lý do gốc:*", ...position.reasons.map((reason) => `• ${reason}`));
+  }
+
+  return lines.join("\n");
+}
+
+export function buildPerformanceReportMessage(report: PerformanceReport): string {
+  const lines: string[] = [
+    `📈 *Báo cáo hiệu suất ${report.periodLabel}*`,
+    `*Kỳ:* ${report.startAt} -> ${report.endAt}`,
+    "",
+    "*Tổng quan portfolio*",
+    `Lenh dong: ${report.portfolio.trades}`,
+    `Win rate: ${report.portfolio.winRate}% (${report.portfolio.wins}W/${report.portfolio.losses}L/${report.portfolio.breakevens}BE)`,
+    `Tong R thuc te: ${report.portfolio.totalRealizedRiskReward.toFixed(2)}R`,
+    `R trung binh: ${report.portfolio.averageRealizedRiskReward.toFixed(2)}R/lenh`,
+    `Max drawdown: ${report.portfolio.maxDrawdown.toFixed(2)}R`,
+  ];
+
+  if (report.byPair.length > 0) {
+    lines.push("", "*Theo cap tien*");
+    for (const pair of report.byPair) {
+      lines.push(
+        `${pair.label}: ${pair.trades} lenh | WR ${pair.winRate}% | Tong ${pair.totalRealizedRiskReward.toFixed(2)}R | Avg ${pair.averageRealizedRiskReward.toFixed(2)}R | DD ${pair.maxDrawdown.toFixed(2)}R`,
+      );
+    }
+  } else {
+    lines.push("", "_Khong co lenh dong trong ky bao cao nay._");
   }
 
   return lines.join("\n");

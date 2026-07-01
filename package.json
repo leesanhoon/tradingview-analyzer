@@ -9,6 +9,7 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "analyze": "tsx src/charts/index.ts",
+        "performance-report": "tsx src/charts/performance-report-runner.ts",
         "test-analyze": "tsx src/charts/test-analyze.ts",
         "test-model-compare": "tsx src/charts/test-model-compare.ts",
         "setup:telegram-menu": "tsx src/scripts/setup-telegram-menu.ts",

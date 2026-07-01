@@ -87,14 +87,46 @@ describe("charts/position-engine", () => {
         tp1RiskReward: 2,
         tp2RiskReward: 3,
       },
+      {
+        existingTp1ClosedPercent: 50,
+      },
     );
 
     expect(outcome.closePosition).toBe(true);
     expect(outcome.patch).toMatchObject({
       tradeStage: "closed",
-      tp1ClosedPercent: 100,
+      tp1ClosedPercent: 50,
       lastManagementAction: "TP2_CLOSE",
       stopLoss: "1.1060",
+    });
+  });
+
+  test("creates a manual close patch for CLOSE decisions that are not TP2", () => {
+    const outcome = deriveManagementPatch(
+      "1.0960",
+      "1.1000",
+      {
+        decision: "CLOSE",
+        confidence: 75,
+        comment: "Setup invalidated",
+        managementAction: "NONE",
+        partialClosePercent: 0,
+        newStopLoss: null,
+        tp1Reached: false,
+        tp2Reached: false,
+        riskReward: null,
+        tp1RiskReward: 2,
+        tp2RiskReward: 3,
+      },
+      {
+        existingTp1ClosedPercent: 50,
+      },
+    );
+
+    expect(outcome.closePosition).toBe(true);
+    expect(outcome.patch).toMatchObject({
+      tradeStage: "closed",
+      lastManagementAction: "NONE",
     });
   });
 });

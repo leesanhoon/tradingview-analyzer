@@ -6,6 +6,7 @@ const repoState = vi.hoisted(() => ({
   updateResult: { error: null as null | { message: string } },
   select: vi.fn(),
   eq: vi.fn(),
+  gte: vi.fn(),
   limit: vi.fn(),
   order: vi.fn(),
   insert: vi.fn(),
@@ -26,6 +27,7 @@ describe("charts/positions-repository", () => {
   beforeEach(() => {
     repoState.select.mockReset();
     repoState.eq.mockReset();
+    repoState.gte.mockReset();
     repoState.limit.mockReset();
     repoState.order.mockReset();
     repoState.insert.mockReset();
@@ -35,6 +37,7 @@ describe("charts/positions-repository", () => {
     const chain = {
       select: vi.fn(() => chain),
       eq: vi.fn(() => chain),
+      gte: vi.fn(() => chain),
       limit: vi.fn(async () => repoState.selectResult),
       order: vi.fn(async () => repoState.selectResult),
       insert: vi.fn(async () => repoState.insertResult),
@@ -194,9 +197,79 @@ describe("charts/positions-repository", () => {
     expect(management.closePosition).toBe(true);
     expect(management.patch).toMatchObject({
       tradeStage: "closed",
-      tp1ClosedPercent: 100,
+      tp1ClosedPercent: 50,
       stopLoss: "1.1060",
       lastManagementAction: "TP2_CLOSE",
     });
+  });
+
+  test("closePosition stores realized performance metrics for manual close", async () => {
+    repoState.updateResult = { error: null };
+
+    await positionsRepository.closePosition(
+      {
+        id: 7,
+        pair: "EUR/USD",
+        direction: "LONG",
+        setup: "Breakout",
+        entry: "1.1000",
+        stopLoss: "1.1000",
+        takeProfit1: "1.1080",
+        takeProfit2: "1.1120",
+        reasons: ["EMA touch"],
+        openedAt: "2026-07-01T00:00:00.000Z",
+        status: "open",
+        lastDecision: null,
+        lastDecisionConfidence: null,
+        lastDecisionComment: null,
+        lastCheckedAt: null,
+        closedAt: null,
+        tradeStage: "tp1_partial",
+        tp1ClosePercent: 50,
+        tp1ClosedPercent: 50,
+        tp1ClosedAt: "2026-07-01T00:00:00.000Z",
+        trailingStopLoss: "1.1000",
+        trailingStartedAt: "2026-07-01T00:00:00.000Z",
+        riskRewardRatio: 2.5,
+        tp1RiskRewardRatio: 2,
+        tp2RiskRewardRatio: 3,
+        minRiskRewardRatio: 1.5,
+        lastManagementAction: "PARTIAL_TP1",
+        lastManagementComment: "TP1 reached",
+        lastManagementAt: "2026-07-01T00:00:00.000Z",
+        closeReason: null,
+        realizedRiskRewardRatio: null,
+        realizedExitPrice: null,
+      },
+      {
+        decision: "CLOSE",
+        confidence: 80,
+        comment: "Setup invalidated",
+        managementAction: "NONE",
+        partialClosePercent: 0,
+        newStopLoss: null,
+        tp1Reached: false,
+        tp2Reached: false,
+        riskReward: null,
+        tp1RiskReward: 2,
+        tp2RiskReward: 3,
+      },
+      {
+        tradeStage: "closed",
+        tp1ClosedPercent: 50,
+        trailingStopLoss: "1.1000",
+        stopLoss: "1.1000",
+        lastManagementAction: "NONE",
+      },
+    );
+
+    expect(repoState.from().update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "closed",
+        close_reason: "manual_close",
+        realized_risk_reward_ratio: 1,
+        realized_exit_price: "1.1000",
+      }),
+    );
   });
 });

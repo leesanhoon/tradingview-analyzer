@@ -9,7 +9,7 @@ Nguồn: [docs/plan-for-app.md](../plan-for-app.md). Mỗi phase dưới đây l
 | 03 | [Webhook idempotency](03-webhook-idempotency.md) | Cao | todo |
 | 04 | [Rate limiting chủ động](04-rate-limiting.md) | Cao | done |
 | 05 | [Position decision engine](05-position-decision-engine.md) | Trung bình | done |
-| 06 | [Performance tracking](06-performance-tracking.md) | Trung bình | todo |
+| 06 | [Performance tracking](06-performance-tracking.md) | Trung bình | done |
 | 07 | [Backtesting](07-backtesting.md) | Trung bình | todo |
 | 08 | [Cost & observability](08-cost-observability.md) | Trung bình | todo |
 | 09 | [Lệnh /stats](09-stats-command.md) | Trung bình | todo |

@@ -8,6 +8,7 @@ import {
   type OpenPositionManagementPatch,
   type PositionDecisionOutcome,
 } from "./position-engine.js";
+import { buildClosedPositionSnapshot, type ClosedPositionRecord } from "./performance-tracking.js";
 
 const logger = createLogger("charts:positions-repository");
 
@@ -41,6 +42,9 @@ export type OpenPosition = {
   lastManagementAction: string | null;
   lastManagementComment: string | null;
   lastManagementAt: string | null;
+  closeReason: "stop_loss" | "take_profit_2" | "manual_close" | null;
+  realizedRiskRewardRatio: number | null;
+  realizedExitPrice: string | null;
 };
 
 export async function saveOpenPosition(setup: TradeSetup): Promise<boolean> {
@@ -69,7 +73,7 @@ export async function saveOpenPosition(setup: TradeSetup): Promise<boolean> {
 export async function loadOpenPositions(): Promise<OpenPosition[]> {
   const { data, error } = await (getDb().from("open_positions") as any)
     .select(
-      "id, pair, direction, setup, entry, stop_loss, take_profit_1, take_profit_2, reasons, opened_at, status, last_decision, last_decision_confidence, last_decision_comment, last_checked_at, closed_at, trade_stage, tp1_close_percent, tp1_closed_percent, tp1_closed_at, trailing_stop_loss, trailing_started_at, risk_reward_ratio, tp1_risk_reward_ratio, tp2_risk_reward_ratio, min_risk_reward_ratio, last_management_action, last_management_comment, last_management_at",
+      "id, pair, direction, setup, entry, stop_loss, take_profit_1, take_profit_2, reasons, opened_at, status, last_decision, last_decision_confidence, last_decision_comment, last_checked_at, closed_at, trade_stage, tp1_close_percent, tp1_closed_percent, tp1_closed_at, trailing_stop_loss, trailing_started_at, risk_reward_ratio, tp1_risk_reward_ratio, tp2_risk_reward_ratio, min_risk_reward_ratio, last_management_action, last_management_comment, last_management_at, close_reason, realized_risk_reward_ratio, realized_exit_price",
     )
     .eq("status", "open")
     .order("opened_at", { ascending: true });
@@ -106,6 +110,9 @@ export async function loadOpenPositions(): Promise<OpenPosition[]> {
       last_management_action: string | null;
       last_management_comment: string | null;
       last_management_at: string | null;
+      close_reason?: "stop_loss" | "take_profit_2" | "manual_close" | null;
+      realized_risk_reward_ratio?: number | null;
+      realized_exit_price?: string | null;
     }>
   ).map((row) => ({
     id: row.id,
@@ -137,6 +144,65 @@ export async function loadOpenPositions(): Promise<OpenPosition[]> {
     lastManagementAction: row.last_management_action,
     lastManagementComment: row.last_management_comment,
     lastManagementAt: row.last_management_at,
+    closeReason: row.close_reason ?? null,
+    realizedRiskRewardRatio: row.realized_risk_reward_ratio ?? null,
+    realizedExitPrice: row.realized_exit_price ?? null,
+  }));
+}
+
+export async function loadClosedPositions(since?: string): Promise<ClosedPositionRecord[]> {
+  let query = (getDb().from("open_positions") as any)
+    .select(
+      "id, pair, direction, entry, stop_loss, take_profit_1, take_profit_2, status, closed_at, tp1_closed_percent, trailing_stop_loss, risk_reward_ratio, tp1_risk_reward_ratio, tp2_risk_reward_ratio, last_management_action, close_reason, realized_risk_reward_ratio, realized_exit_price",
+    )
+    .eq("status", "closed")
+    .order("closed_at", { ascending: true });
+
+  if (since) {
+    query = query.gte("closed_at", since);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`loadClosedPositions failed: ${error.message}`);
+
+  return ((data ?? []) as Array<{
+    id: number;
+    pair: string;
+    direction: "LONG" | "SHORT";
+    entry: string;
+    stop_loss: string;
+    take_profit_1: string;
+    take_profit_2: string | null;
+    status: "closed";
+    closed_at: string;
+    tp1_closed_percent: number | null;
+    trailing_stop_loss: string | null;
+    risk_reward_ratio: number | null;
+    tp1_risk_reward_ratio: number | null;
+    tp2_risk_reward_ratio: number | null;
+    last_management_action: string | null;
+    close_reason: "stop_loss" | "take_profit_2" | "manual_close" | null;
+    realized_risk_reward_ratio: number | null;
+    realized_exit_price: string | null;
+  }>).map((row) => ({
+    id: row.id,
+    pair: row.pair,
+    direction: row.direction,
+    entry: row.entry,
+    stopLoss: row.stop_loss,
+    takeProfit1: row.take_profit_1,
+    takeProfit2: row.take_profit_2,
+    status: row.status,
+    closedAt: row.closed_at,
+    tp1ClosedPercent: row.tp1_closed_percent,
+    trailingStopLoss: row.trailing_stop_loss,
+    riskRewardRatio: row.risk_reward_ratio,
+    tp1RiskRewardRatio: row.tp1_risk_reward_ratio,
+    tp2RiskRewardRatio: row.tp2_risk_reward_ratio,
+    lastManagementAction: row.last_management_action,
+    closeReason: row.close_reason,
+    realizedRiskRewardRatio: row.realized_risk_reward_ratio,
+    realizedExitPrice: row.realized_exit_price,
   }));
 }
 
@@ -172,17 +238,57 @@ export function buildPositionManagementPatch(
 ): { patch: OpenPositionManagementPatch | null; closePosition: boolean } {
   return deriveManagementPatch(position.stopLoss, position.entry, decision, {
     partialClosePercent: position.tp1ClosePercent ?? undefined,
+    existingTp1ClosedPercent: position.tp1ClosedPercent ?? 0,
   });
 }
 
-export async function closePosition(id: number): Promise<void> {
+export async function closePosition(
+  position: OpenPosition,
+  decision: PositionDecisionOutcome,
+  patch: OpenPositionManagementPatch | null = null,
+): Promise<void> {
+  const closeReason =
+    decision.tp2Reached || decision.managementAction === "TP2_CLOSE"
+      ? "TP2_CLOSE"
+      : decision.decision === "CLOSE"
+        ? "MANUAL_CLOSE"
+        : "STOP";
+
+  const snapshot = buildClosedPositionSnapshot(
+    {
+      id: position.id,
+      pair: position.pair,
+      direction: position.direction,
+      entry: position.entry,
+      stopLoss: patch?.stopLoss ?? position.stopLoss,
+      takeProfit1: position.takeProfit1,
+      takeProfit2: position.takeProfit2,
+      status: "closed",
+      closedAt: new Date().toISOString(),
+      tp1ClosedPercent: patch?.tp1ClosedPercent ?? position.tp1ClosedPercent,
+      trailingStopLoss: patch?.trailingStopLoss ?? position.trailingStopLoss,
+      riskRewardRatio: position.riskRewardRatio,
+      tp1RiskRewardRatio: position.tp1RiskRewardRatio,
+      tp2RiskRewardRatio: position.tp2RiskRewardRatio,
+      lastManagementAction: patch?.lastManagementAction ?? position.lastManagementAction,
+      closeReason: null,
+      realizedRiskRewardRatio: null,
+      realizedExitPrice: null,
+    },
+    closeReason,
+    { stopLoss: patch?.stopLoss ?? position.stopLoss },
+  );
+
   const { error } = await (getDb().from("open_positions") as any)
     .update({
       status: "closed",
       closed_at: new Date().toISOString(),
       trade_stage: "closed",
+      close_reason: snapshot.closeReason,
+      realized_risk_reward_ratio: snapshot.realizedRiskRewardRatio,
+      realized_exit_price: snapshot.realizedExitPrice,
     })
-    .eq("id", id);
+    .eq("id", position.id);
 
   if (error) throw new Error(`closePosition failed: ${error.message}`);
 }

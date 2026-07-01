@@ -1,0 +1,50 @@
+name: Performance Report
+
+on:
+  schedule:
+    - cron: "15 1 * * 1"
+    - cron: "20 1 1 * *"
+  workflow_dispatch:
+    inputs:
+      period:
+        description: "weekly or monthly"
+        required: false
+        default: "weekly"
+
+jobs:
+  performance-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve report period
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "PERFORMANCE_REPORT_PERIOD=${{ inputs.period }}" >> "$GITHUB_ENV"
+          elif [[ "${{ github.event.schedule }}" == "20 1 1 * *" ]]; then
+            echo "PERFORMANCE_REPORT_PERIOD=monthly" >> "$GITHUB_ENV"
+          else
+            echo "PERFORMANCE_REPORT_PERIOD=weekly" >> "$GITHUB_ENV"
+          fi
+
+      - name: Send performance report
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: npm run performance-report

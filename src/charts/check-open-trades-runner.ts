@@ -24,7 +24,7 @@ async function processPosition(position: Awaited<ReturnType<typeof loadOpenPosit
   const { patch, closePosition: shouldClose } = buildPositionManagementPatch(position, decision);
   await updatePositionDecision(position.id, decision, patch);
   if (shouldClose) {
-    await closePosition(position.id);
+    await closePosition(position, decision, patch);
   }
 
   const message = buildPositionDecisionMessage(

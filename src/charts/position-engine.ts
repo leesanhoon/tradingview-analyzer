@@ -43,6 +43,11 @@ export type OpenPositionManagementPatch = {
   stopLoss?: string;
 };
 
+export type DeriveManagementPatchOptions = {
+  partialClosePercent?: number;
+  existingTp1ClosedPercent?: number | null;
+};
+
 export type OpenPositionValidation = {
   accepted: boolean;
   reason: string | null;
@@ -194,20 +199,21 @@ export function deriveManagementPatch(
   currentStopLoss: string,
   entry: string,
   decision: PositionDecisionOutcome,
-  options: { partialClosePercent?: number } = {},
+  options: DeriveManagementPatchOptions = {},
 ): { patch: OpenPositionManagementPatch | null; closePosition: boolean } {
   const now = new Date().toISOString();
   const partialClosePercent = clampPercent(
     options.partialClosePercent ?? decision.partialClosePercent ?? getConfiguredTp1ClosePercent(),
   );
+  const existingTp1ClosedPercent = Math.max(0, Math.min(100, Math.round(Number(options.existingTp1ClosedPercent ?? 0))));
   const breakevenStopLoss = decision.newStopLoss?.trim() || entry;
 
   if (decision.managementAction === "TP2_CLOSE" || decision.tp2Reached || decision.decision === "STOP") {
     return {
       patch: {
         tradeStage: "closed",
-        tp1ClosedPercent: 100,
-        tp1ClosedAt: now,
+        tp1ClosedPercent: existingTp1ClosedPercent,
+        tp1ClosedAt: existingTp1ClosedPercent > 0 ? now : null,
         trailingStopLoss: decision.newStopLoss ?? currentStopLoss,
         trailingStartedAt: now,
         lastManagementAction: decision.managementAction === "NONE" ? "TP2_CLOSE" : decision.managementAction,
@@ -223,7 +229,7 @@ export function deriveManagementPatch(
     return {
       patch: {
         tradeStage: "tp1_partial",
-        tp1ClosedPercent: partialClosePercent,
+        tp1ClosedPercent: Math.max(existingTp1ClosedPercent, partialClosePercent),
         tp1ClosedAt: now,
         trailingStopLoss: breakevenStopLoss,
         trailingStartedAt: now,
@@ -255,7 +261,7 @@ export function deriveManagementPatch(
     return {
       patch: {
         tradeStage: "closed",
-        lastManagementAction: "TP2_CLOSE",
+        lastManagementAction: "NONE",
         lastManagementComment: decision.comment,
         lastManagementAt: now,
       },
