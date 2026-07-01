@@ -8,8 +8,8 @@ import { recordGeminiUsage } from "../shared/ai-usage.js";
 
 const logger = createLogger("betting:betting-gemini");
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
-const VERIFY_MODEL_FALLBACK = "gemini-3.5-flash";
+const VERIFY_MODEL_PRIMARY = process.env.BETTING_VERIFY_MODEL_PRIMARY?.trim() || "gemini-2.5-pro";
+const VERIFY_MODEL_FALLBACK = process.env.BETTING_VERIFY_MODEL_FALLBACK?.trim() || "gemini-3.5-flash";
 const GEMINI_RATE_LIMIT = {
   key: "gemini",
   envVar: "GEMINI_RATE_LIMIT_RPM",
@@ -101,7 +101,7 @@ function buildGenerationConfig(model: string, maxOutputTokens: number) {
     responseMimeType: "application/json",
   };
 
-  if (model === "gemini-2.5-pro") {
+  if (model === VERIFY_MODEL_PRIMARY) {
     config.maxOutputTokens = Math.max(maxOutputTokens, 900);
     config.thinkingConfig = { thinkingBudget: 128 };
   } else {

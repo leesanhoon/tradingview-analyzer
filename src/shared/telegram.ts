@@ -7,8 +7,11 @@ import type {
 import type { Notifier } from "./notifier.js";
 import { createLogger } from "./logger.js";
 import type { PerformanceReport } from "../charts/performance-tracking.js";
+import { getConfiguredChartSignalConfidenceThreshold } from "../charts/chart-config-env.js";
 
 const logger = createLogger("shared:telegram");
+const CHART_VERIFY_MODEL_PRIMARY = process.env.CHART_VERIFY_MODEL_PRIMARY?.trim() || "gemini-2.5-pro";
+const CHART_VERIFY_MODEL_CLAUDE = process.env.CHART_VERIFY_MODEL_CLAUDE?.trim() || "claude-sonnet-4-6";
 export type InlineKeyboardMarkup = {
   inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
 };
@@ -190,21 +193,22 @@ async function editMessageReplyMarkup(
 }
 
 function buildSummaryTable(summaries: PairSummary[]): string {
+  const threshold = getConfiguredChartSignalConfidenceThreshold();
   const lines: string[] = ["📊 *TỔNG QUAN TẤT CẢ CẶP TIỀN*", ""];
 
   for (const s of summaries) {
-    const icon = s.confidence >= 70 ? "🟢" : s.confidence >= 40 ? "🟡" : "🔴";
+    const icon = s.confidence >= threshold ? "🟢" : s.confidence >= 40 ? "🟡" : "🔴";
     lines.push(`${icon} *${s.pair}* — ${s.confidence}%`);
     lines.push(`   ${s.trend}`);
     lines.push(`   ${s.status}`);
     lines.push("");
   }
 
-  const tradeCount = summaries.filter((s) => s.confidence >= 70).length;
+  const tradeCount = summaries.filter((s) => s.confidence >= threshold).length;
   if (tradeCount > 0) {
-    lines.push(`✅ *${tradeCount}* cặp có setup đạt yêu cầu (≥70%)`);
+    lines.push(`✅ *${tradeCount}* cặp có setup đạt yêu cầu (≥${threshold}%)`);
   } else {
-    lines.push("⏸ Không có cặp nào đạt yêu cầu (≥70%)");
+    lines.push(`⏸ Không có cặp nào đạt yêu cầu (≥${threshold}%)`);
   }
 
   return lines.join("\n");
@@ -230,10 +234,11 @@ function getPatternInfo(setup: string): string {
 }
 
 function buildCopyableSetup(setup: TradeSetup): string {
+  const threshold = getConfiguredChartSignalConfidenceThreshold();
   const arrow = setup.direction === "LONG" ? "🟢" : "🔴";
   const confidence = setup.confidence ?? 0;
   const confBar =
-    confidence >= 80 ? "🟢🟢🟢" : confidence >= 70 ? "🟡🟡" : "🔴";
+    confidence >= 80 ? "🟢🟢🟢" : confidence >= threshold ? "🟡🟡" : "🔴";
   const emaTag = setup.emaTouch ? " 📍EMA" : "";
   const patternInfo = getPatternInfo(setup.setup);
   return [
@@ -268,12 +273,12 @@ function buildCopyableSetup(setup: TradeSetup): string {
 function buildConfirmationLine(setup: TradeSetup): string {
   if (setup.verifiedConfirmed === true) {
     const verifiedBy =
-      setup.verifiedBy === "claude-sonnet-4-6"
-        ? "Claude Sonnet 4.6"
-        : "Gemini 2.5 Pro";
+      setup.verifiedBy === CHART_VERIFY_MODEL_CLAUDE
+        ? CHART_VERIFY_MODEL_CLAUDE
+        : CHART_VERIFY_MODEL_PRIMARY;
     return `✅ *Đã xác nhận bởi ${verifiedBy}* (${setup.verifiedConfidence}%)${setup.verifiedComment ? ` — ${setup.verifiedComment}` : ""}`;
   }
-  return `⚠️ _Chưa xác nhận bởi Gemini 2.5 Pro (lỗi xác minh, fallback Claude Sonnet 4.6)_`;
+  return `⚠️ _Chưa xác nhận bởi ${CHART_VERIFY_MODEL_PRIMARY} (lỗi xác minh, fallback ${CHART_VERIFY_MODEL_CLAUDE})_`;
 }
 
 export function buildPositionDecisionMessage(
@@ -416,21 +421,22 @@ export async function sendAllAnalyses(
   result: AnalysisResult,
   notifier: Notifier = telegramNotifier,
 ): Promise<void> {
+  const threshold = getConfiguredChartSignalConfidenceThreshold();
   const timestamp = new Date().toLocaleString("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
-  // No setups at all from analyzer (≥70%)
+  // No setups at all from analyzer (threshold)
   if (result.setups.length === 0) {
     await notifier.sendMessage(
-      `🚀 *Bob Volman Multi-Timeframe Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền (D1/H4/M15 + volume)\n\n⏸ Không có setup đạt yêu cầu (>80%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
+      `🚀 *Bob Volman Multi-Timeframe Scanner*\n📅 ${timestamp}\n📊 Đã quét *${result.summaries.length}* cặp tiền (D1/H4/M15 + volume)\n\n⏸ Không có setup đạt yêu cầu (>${threshold}%)\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
     logger.info("  → No high-confidence setups. Notification sent.");
     return;
   }
 
   const geminiHighConfSetups = result.setups.filter(
-    (s) => (s.confidence ?? 0) > 70,
+    (s) => (s.confidence ?? 0) > threshold,
   );
   const rejectedByVerified = geminiHighConfSetups.filter(
     (s) => s.verifiedConfirmed === false,
@@ -440,8 +446,8 @@ export async function sendAllAnalyses(
   );
   const headerSuffix =
     geminiHighConfSetups.length > 0
-      ? " (>80%, đã đối chiếu Gemini 2.5 Pro -> Claude Sonnet 4.6)"
-      : " (>80%)";
+      ? ` (>${threshold}%, đã đối chiếu ${CHART_VERIFY_MODEL_PRIMARY} -> ${CHART_VERIFY_MODEL_CLAUDE})`
+      : ` (>${threshold}%)`;
 
   // Header
   await notifier.sendMessage(
@@ -451,8 +457,8 @@ export async function sendAllAnalyses(
   if (highConfSetups.length === 0) {
     const reason =
       geminiHighConfSetups.length === 0
-        ? `Không tìm thấy setup nào > 70% (chỉ có ${result.setups.length} setup ở mức >=70%).`
-        : `Tìm thấy ${geminiHighConfSetups.length} setup > 70%, nhưng Gemini 2.5 Pro -> Claude Sonnet 4.6 đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
+        ? `Không tìm thấy setup nào >${threshold}% (chỉ có ${result.setups.length} setup ở mức >=${threshold}%).`
+        : `Tìm thấy ${geminiHighConfSetups.length} setup >${threshold}%, nhưng ${CHART_VERIFY_MODEL_PRIMARY} -> ${CHART_VERIFY_MODEL_CLAUDE} đã *từ chối* tất cả ${rejectedByVerified.length} setup đó sau khi đối chiếu độc lập.`;
     await notifier.sendMessage(
       `⏸ ${reason}\n\n_"Không trade cũng là một quyết định đúng." — Bob Volman_`,
     );
@@ -482,6 +488,6 @@ export async function sendAllAnalyses(
   }
 
   await notifier.sendMessage(
-    `✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) > 70%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`,
+    `✅ *Scan hoàn tất* — ${highConfSetups.length} setup(s) >${threshold}%\n\n⚠️ _Đây chỉ là phân tích tham khảo, không phải lời khuyên đầu tư._`,
   );
 }

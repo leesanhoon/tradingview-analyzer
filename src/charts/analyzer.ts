@@ -6,10 +6,12 @@ import { captureVerificationChartScreenshot, findChartForPair } from "./screensh
 import { createLogger } from "../shared/logger.js";
 import { withConfiguredRateLimit } from "../shared/rate-limit.js";
 import { recordClaudeUsage, recordGeminiUsage } from "../shared/ai-usage.js";
+import { getConfiguredChartSignalConfidenceThreshold } from "./chart-config-env.js";
 
 const logger = createLogger("charts:analyzer");
-const VERIFY_MODEL_PRIMARY = "gemini-2.5-pro";
-const ANALYSIS_MODEL = "gemini-3.5-flash";
+const VERIFY_MODEL_PRIMARY = process.env.CHART_VERIFY_MODEL_PRIMARY?.trim() || "gemini-2.5-pro";
+const ANALYSIS_MODEL = process.env.CHART_ANALYSIS_MODEL?.trim() || "gemini-3.5-flash";
+const VERIFY_MODEL_CLAUDE = process.env.CHART_VERIFY_MODEL_CLAUDE?.trim() || "claude-sonnet-4-6";
 const GEMINI_RATE_LIMIT = {
   key: "gemini",
   envVar: "GEMINI_RATE_LIMIT_RPM",
@@ -23,7 +25,8 @@ type VerificationResult = {
   verifiedBy: string;
 };
 
-const SYSTEM_PROMPT = `Act as a professional price-action trader using Bob Volman's methodology, EMA 20, and volume.
+function buildSystemPrompt(threshold: number): string {
+  return `Act as a professional price-action trader using Bob Volman's methodology, EMA 20, and volume.
 
 Analyze each instrument as one multi-timeframe package:
 - D1 establishes the dominant trend and major support/resistance.
@@ -31,12 +34,15 @@ Analyze each instrument as one multi-timeframe package:
 - M15 refines entry timing and rejects entries with noisy, contradictory price action.
 - Volume must confirm a breakout or rejection. Treat weak or declining volume as a risk, never as confirmation.
 
-Only recommend TRADE when D1 and H4 direction agree, M15 does not contradict them, price is at or near H4 EMA 20 or has a clean buildup, and volume supports the move. Missing timeframes, conflicting trends, distant price without a pullback, flat EMA, weak volume, or poor risk/reward must reduce confidence. If fewer than two timeframes agree, or confidence is below 70%, conclude NO TRADE. Never invent unreadable price levels.`;
+Only recommend TRADE when D1 and H4 direction agree, M15 does not contradict them, price is at or near H4 EMA 20 or has a clean buildup, and volume supports the move. Missing timeframes, conflicting trends, distant price without a pullback, flat EMA, weak volume, or poor risk/reward must reduce confidence. If fewer than two timeframes agree, or confidence is below ${threshold}%, conclude NO TRADE. Never invent unreadable price levels.`;
+}
 
-const USER_PROMPT = `Analyze the attached chart packages. Each image label contains pair and timeframe. Return only JSON with keys summaries, setups, and noSetupReason.
+function buildUserPrompt(threshold: number): string {
+  return `Analyze the attached chart packages. Each image label contains pair and timeframe. Return only JSON with keys summaries, setups, and noSetupReason.
 
 In summaries include every pair with pair, trend (describe D1/H4/M15 alignment), emaProximity (tại/gần/xa), status, and confidence.
-In setups include only confluence setups with confidence >=70%; include pair, direction, setup, emaTouch, reasons, risks, confidence, entry, stopLoss, takeProfit1, takeProfit2, riskReward, and summary. Reasons must explicitly mention D1, H4, M15, and volume evidence. Provide levels from H4/M15. Omit surrounding text.`;
+In setups include only confluence setups with confidence >=${threshold}%; include pair, direction, setup, emaTouch, reasons, risks, confidence, entry, stopLoss, takeProfit1, takeProfit2, riskReward, and summary. Reasons must explicitly mention D1, H4, M15, and volume evidence. Provide levels from H4/M15. Omit surrounding text.`;
+}
 
 function getClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -110,7 +116,8 @@ export function parseAnalysisResponse(text: string): { summaries: PairSummary[];
   const cleaned = extractJsonObject(text);
   try {
     const parsed = JSON.parse(cleaned) as Partial<{ summaries: PairSummary[]; setups: TradeSetup[]; noSetupReason: string }>;
-    const setups = (parsed.setups || []).filter((s) => (s.confidence ?? 0) >= 70);
+    const threshold = getConfiguredChartSignalConfidenceThreshold();
+    const setups = (parsed.setups || []).filter((s) => (s.confidence ?? 0) >= threshold);
     return {
       summaries: parsed.summaries || [],
       setups,
@@ -156,6 +163,7 @@ Keep comment short and specific.`;
 }
 
 async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<string> {
+  const threshold = getConfiguredChartSignalConfidenceThreshold();
   const ai = getClient();
   const parts: Array<{ inlineData: { mimeType: string; data: string } } | { text: string }> = [];
   const orderedScreenshots = [...screenshots].sort((left, right) => {
@@ -169,7 +177,7 @@ async function analyzeWithGemini(screenshots: ScreenshotResult[]): Promise<strin
     });
     parts.push({ text: `[PAIR=${screenshot.chart.name.replace(` ${screenshot.chart.timeframe}`, "")}; TIMEFRAME=${screenshot.chart.timeframe}]` });
   }
-  parts.push({ text: SYSTEM_PROMPT + "\n\n" + USER_PROMPT });
+  parts.push({ text: `${buildSystemPrompt(threshold)}\n\n${buildUserPrompt(threshold)}` });
 
   const request = () =>
     withConfiguredRateLimit(GEMINI_RATE_LIMIT, async () =>
@@ -211,7 +219,7 @@ async function verifySetupWithClaude(
 
   const request = () =>
     ai.messages.create({
-      model: "claude-sonnet-4-6",
+      model: VERIFY_MODEL_CLAUDE,
       max_tokens: 300,
       temperature: 0.2,
       system: "You verify chart setups. Answer only with concise JSON.",
@@ -244,7 +252,7 @@ async function verifySetupWithClaude(
   });
 
   void recordClaudeUsage(result as { usage?: { input_tokens?: number; output_tokens?: number } }, {
-    model: "claude-sonnet-4-6",
+    model: VERIFY_MODEL_CLAUDE,
     source: "chart",
   });
 
@@ -256,7 +264,7 @@ async function verifySetupWithClaude(
     confirmed: Boolean(parsed.confirmed),
     confidence: clampConfidence(parsed.confidence),
     comment: String(parsed.comment || ""),
-    verifiedBy: "claude-sonnet-4-6",
+    verifiedBy: VERIFY_MODEL_CLAUDE,
   };
 }
 
@@ -329,7 +337,7 @@ async function verifySetupWithGemini(
     return await verifySetupWithGeminiModel(setup, verificationChart.buffer, VERIFY_MODEL_PRIMARY);
   } catch (primaryError) {
     logger.warn(
-      `  ! Gemini verify failed with ${VERIFY_MODEL_PRIMARY} for ${setup.pair}, falling back to Claude Sonnet 4.6: ${
+      `  ! Gemini verify failed with ${VERIFY_MODEL_PRIMARY} for ${setup.pair}, falling back to ${VERIFY_MODEL_CLAUDE}: ${
         primaryError instanceof Error ? primaryError.message : primaryError
       }`,
     );
@@ -338,7 +346,7 @@ async function verifySetupWithGemini(
 }
 
 /**
- * Re-checks high-confidence (>80%) setups against the configured verify provider independently,
+ * Re-checks high-confidence setups against the configured verify provider independently,
  * one chart at a time, so a single bad pair can't sink the rest.
  */
 export async function confirmHighConfidenceSetups(
@@ -360,7 +368,7 @@ export async function confirmHighConfidenceSetups(
     }
 
     try {
-      logger.info(`  -> Verifying ${setup.pair} with Gemini 2.5 Pro (fallback Claude Sonnet 4.6)...`);
+      logger.info(`  -> Verifying ${setup.pair} with ${VERIFY_MODEL_PRIMARY} (fallback ${VERIFY_MODEL_CLAUDE})...`);
       const verification = await verifySetupWithGemini(setup, chart);
       logger.info(
         `  ${verification.confirmed ? "✓" : "✗"} ${setup.pair}: ${verification.verifiedBy} ${
@@ -384,9 +392,10 @@ export async function confirmHighConfidenceSetups(
 }
 
 export async function analyzeAllCharts(screenshots: ScreenshotResult[]): Promise<AnalysisResult> {
-  logger.info("  -> Trying Gemini 3.5 Flash...");
+  const threshold = getConfiguredChartSignalConfidenceThreshold();
+  logger.info(`  -> Trying ${ANALYSIS_MODEL}...`);
   const rawResponse = await analyzeWithGemini(screenshots);
-  logger.info("  ✓ Analyzed by Gemini 3.5 Flash");
+  logger.info(`  ✓ Analyzed by ${ANALYSIS_MODEL}`);
 
   const { summaries, setups, noSetupReason } = parseAnalysisResponse(rawResponse);
   const usesMultiTimeframeInput = screenshots.some((s) => Boolean(s.chart.timeframe));
@@ -404,7 +413,7 @@ export async function analyzeAllCharts(screenshots: ScreenshotResult[]): Promise
       })
     : setups;
   logger.info(
-    `  ✓ ${summaries.length} pairs scanned, ${confluenceSetups.length} complete multi-timeframe setup(s) >=70% confidence`,
+    `  ✓ ${summaries.length} pairs scanned, ${confluenceSetups.length} complete multi-timeframe setup(s) >=${threshold}% confidence`,
   );
 
   return { summaries, setups: confluenceSetups, noSetupReason, screenshots };

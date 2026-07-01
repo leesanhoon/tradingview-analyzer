@@ -10,6 +10,8 @@ import { recordClaudeUsage, recordGeminiUsage } from "../shared/ai-usage.js";
 import type { ScreenshotResult } from "./chart-types.js";
 
 const logger = createLogger("charts:position-decision");
+const POSITION_VERIFY_MODEL_GEMINI = process.env.POSITION_VERIFY_MODEL_GEMINI?.trim() || "gemini-2.5-pro";
+const POSITION_VERIFY_MODEL_CLAUDE = process.env.POSITION_VERIFY_MODEL_CLAUDE?.trim() || "claude-sonnet-4-6";
 const GEMINI_RATE_LIMIT = {
   key: "gemini",
   envVar: "GEMINI_RATE_LIMIT_RPM",
@@ -37,7 +39,7 @@ export function buildGenerationConfig(model: string, maxOutputTokens: number) {
     responseMimeType: "application/json",
   };
 
-  if (model !== "gemini-2.5-pro") {
+  if (model !== POSITION_VERIFY_MODEL_GEMINI) {
     config.thinkingConfig = { thinkingBudget: 0 };
   }
 
@@ -138,7 +140,7 @@ Comment should be short and practical.`;
 
   const request = () =>
     ai.messages.create({
-      model: "claude-sonnet-4-6",
+      model: POSITION_VERIFY_MODEL_CLAUDE,
       max_tokens: 300,
       temperature: 0.2,
       system: "You manage open trades from chart evidence. Answer only with concise JSON.",
@@ -171,7 +173,7 @@ Comment should be short and practical.`;
   });
 
   void recordClaudeUsage(response as { usage?: { input_tokens?: number; output_tokens?: number } }, {
-    model: "claude-sonnet-4-6",
+    model: POSITION_VERIFY_MODEL_CLAUDE,
     source: "chart",
   });
 
@@ -187,7 +189,7 @@ async function decidePositionWithGemini(
   screenshot: ScreenshotResult,
 ): Promise<PositionDecisionOutcome> {
   const ai = getClient();
-  const model = "gemini-2.5-pro";
+  const model = POSITION_VERIFY_MODEL_GEMINI;
 
   const prompt = `Review the current chart and the open trade below.
 
