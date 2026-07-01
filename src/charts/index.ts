@@ -9,9 +9,12 @@ import { validateTradeSetupForOpen } from "./position-engine.js";
 import { getConfiguredChartSignalConfidenceThreshold } from "./chart-config-env.js";
 
 const logger = createLogger("charts:index");
-const CHART_VERIFY_MODEL_PRIMARY = process.env.CHART_VERIFY_MODEL_PRIMARY?.trim() || "gemini-2.5-pro";
-const CHART_VERIFY_MODEL_CLAUDE = process.env.CHART_VERIFY_MODEL_CLAUDE?.trim() || "claude-sonnet-4-6";
-const CHART_ANALYSIS_MODEL = process.env.CHART_ANALYSIS_MODEL?.trim() || "gemini-3.5-flash";
+const CHART_VERIFY_MODEL_PRIMARY =
+  process.env.CHART_VERIFY_MODEL_PRIMARY?.trim() || "gemini-2.5-pro";
+const CHART_VERIFY_MODEL_CLAUDE =
+  process.env.CHART_VERIFY_MODEL_CLAUDE?.trim() || "claude-sonnet-4-6";
+const CHART_ANALYSIS_MODEL =
+  process.env.CHART_ANALYSIS_MODEL?.trim() || "gemini-3.5-flash";
 
 async function main(): Promise<void> {
   const startTime = Date.now();
@@ -33,7 +36,9 @@ async function main(): Promise<void> {
   logger.info("Analysis complete");
 
   const threshold = getConfiguredChartSignalConfidenceThreshold();
-  const highConfSetups = result.setups.filter((s) => (s.confidence ?? 0) > threshold);
+  const highConfSetups = result.setups.filter(
+    (s) => (s.confidence ?? 0) > threshold,
+  );
   if (highConfSetups.length > 0) {
     logger.info("Verifying high-confidence setups", {
       count: highConfSetups.length,
@@ -77,7 +82,7 @@ async function main(): Promise<void> {
     }
   }
 
-    logger.info("Sending results to Telegram");
+  logger.info("Sending results to Telegram");
   await sendAllAnalyses(result);
 
   logger.info("Checking open positions");
